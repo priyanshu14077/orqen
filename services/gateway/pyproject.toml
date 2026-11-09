@@ -1,0 +1,20 @@
+[project]
+name = "orqen-gateway"
+version = "0.0.0"
+description = "Orqen API gateway: auth, submissions, WebSocket live updates."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "orqen-core",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+]
+
+[tool.uv.sources]
+orqen-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orqen_gateway"]
