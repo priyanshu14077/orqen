@@ -13,3 +13,10 @@ build/
 .DS_Store
 node_modules/
 .next/
+
+# Internal docs: PRDs, ADRs, plans and agent notes stay local.
+# Public documentation lives in README.md.
+docs/
+CLAUDE.md
+AGENTS.md
+.claude/

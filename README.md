@@ -6,8 +6,6 @@
 
 > **Status:** M0 (foundation) is merged. The diagrams below show the target design. Parts that aren't built yet are marked with the milestone that adds them.
 
-Product spec: [docs/PRD.md](docs/PRD.md) · Decisions: [docs/adr/](docs/adr/)
-
 ---
 
 ## Contents
@@ -23,7 +21,8 @@ Product spec: [docs/PRD.md](docs/PRD.md) · Decisions: [docs/adr/](docs/adr/)
 9. [Redis keyspace and streams](#9-redis-keyspace-and-streams)
 10. [Quick start](#10-quick-start)
 11. [Conventions](#11-conventions)
-12. [Milestones](#12-milestones)
+12. [Design decisions](#12-design-decisions)
+13. [Milestones](#13-milestones)
 
 ---
 
@@ -194,7 +193,7 @@ flowchart LR
 
 ## 5. Fan-in: who computes the score
 
-Results arrive in any order, possibly more than once. Exactly one grader must aggregate. Postgres makes that decision; the Redis counter is only for showing progress ([ADR 0003](docs/adr/0003-postgres-is-fan-in-authority.md)).
+Results arrive in any order, and some arrive more than once. Exactly one grader must aggregate. Postgres makes that decision, and the Redis counter only shows progress. [Postgres decides when a submission is complete](#postgres-decides-when-a-submission-is-complete) explains why.
 
 ```mermaid
 flowchart TD
@@ -538,7 +537,49 @@ Seeded logins, all with password `orqen-dev-password`:
 
 ---
 
-## 12. Milestones
+## 12. Design decisions
+
+### Redis Streams carry the work, pub/sub carries live events
+
+A test job must survive a worker crash. With Redis lists (`LPUSH` and `BRPOP`), a popped message is gone, so a worker that crashes mid-job loses it. A stream with a consumer group keeps each message in the pending entries list until a worker runs `XACK`. The watchdog can then reclaim the message with `XAUTOCLAIM`, and the delivery count sets the retry limit.
+
+Kafka also gives these guarantees, but it adds partitions, retention settings and a second system to run. Orqen needs Redis anyway for counters, rate limits and pub/sub, so Kafka buys nothing at this scale.
+
+All tenants share one set of streams, and every payload carries `tenant_id`. Per-tenant streams were rejected: each worker would read N streams, and fairness would still need its own logic. M7 handles fairness with a per-tenant admission cap instead.
+
+Delivery is at least once, so every consumer must be idempotent. Redis runs with AOF (`appendfsync everysec`), so a Redis restart doesn't drop unacknowledged entries. Live progress uses pub/sub. Pub/sub can drop messages, which is acceptable because Postgres and the status hash hold the real state.
+
+### Orqen runs its own agent loop
+
+`orqen_harness` contains the agent loop. The loop calls the model, runs the tool calls the model asks for, and repeats until the model returns a final answer or reaches `max_steps`. The loop talks to the model only through the `ModelAdapter` protocol, and Claude is the first adapter. The LLM judge uses the same adapter for a single call with structured output.
+
+The original plan used Google ADK. ADK's runner, sessions and evaluator are built for one developer testing one agent. Orqen needs a small loop that it can audit, that works with any provider, and that is metered at the proxy. ADK meters through callbacks that run in the same process as user code, and user code can monkeypatch them.
+
+Because the loop runs inside the sandbox, Orqen treats the harness as untrusted too. The proxy enforces the budgets, the model allowlist and the temperature cap, and it records every tool call. To add a provider, write an adapter and a matching translation in the proxy.
+
+### Postgres decides when a submission is complete
+
+N test results reach the graders in any order, and some arrive more than once. Exactly one grader must compute the final score.
+
+The obvious designs write to two systems in a row: `HSETNX` and then `HINCRBY`, or `INSERT` and then `DECR`. If a grader crashes between the two writes, the counter never reaches zero. Redelivery doesn't fix it, because the first write already happened and the grader skips the second.
+
+Orqen counts in Postgres instead, on every delivery, including duplicates:
+
+```sql
+INSERT INTO test_results ... ON CONFLICT (submission_id, test_case_id) DO NOTHING;
+SELECT count(*) FROM test_results WHERE submission_id = $1;
+-- If the count equals the total, try to claim aggregation.
+-- Only the grader that gets a row back computes the score:
+UPDATE submissions SET status = 'AGGREGATING'
+ WHERE id = $1 AND status = 'RUNNING'
+RETURNING id;
+```
+
+A redelivery after a crash runs the count again and completes the submission. The conditional `UPDATE` lets exactly one grader win. Each result costs one extra `count(*)`, which the primary key index serves. Completion no longer depends on Redis agreeing with Postgres.
+
+---
+
+## 13. Milestones
 
 ```mermaid
 flowchart LR
