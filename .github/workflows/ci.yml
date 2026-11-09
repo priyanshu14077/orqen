@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: orqen
+          POSTGRES_PASSWORD: orqen
+          POSTGRES_DB: orqen_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U orqen -d orqen_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      ORQEN_LOG_JSON: "true"
+      ORQEN_DATABASE_URL: postgresql+psycopg://orqen:orqen@localhost:5432/orqen_test
+      ORQEN_REDIS_URL: redis://localhost:6379/0
+      ORQEN_TEST_DATABASE_URL: postgresql+psycopg://orqen:orqen@localhost:5432/orqen_test
+      ORQEN_TEST_REDIS_URL: redis://localhost:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest
