@@ -1,0 +1,83 @@
+[project]
+name = "orqen"
+version = "0.0.0"
+description = "Multi-tenant online judge for AI agents."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "orqen-core",
+    "orqen-harness",
+    "orqen-gateway",
+    "orqen-proxy",
+    "orqen-workers",
+    "alembic>=1.14",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+
+[tool.uv.sources]
+orqen-core = { workspace = true }
+orqen-harness = { workspace = true }
+orqen-gateway = { workspace = true }
+orqen-proxy = { workspace = true }
+orqen-workers = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "orqen_core",
+    "orqen_harness",
+    "orqen_gateway",
+    "orqen_proxy",
+    "orqen_workers",
+    "scripts",
+    "tests",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["packages", "services", "scripts", "migrations", "tests"]
+explicit_package_bases = true
+mypy_path = [
+    "packages/core/src",
+    "packages/harness/src",
+    "services/gateway/src",
+    "services/proxy/src",
+    "services/workers/src",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+markers = ["integration: needs the Postgres and Redis from compose.yaml"]
+filterwarnings = [
+    # Starlette's TestClient nags about httpx; nothing to act on until FastAPI moves.
+    "ignore:Using `httpx` with `starlette.testclient`",
+]

@@ -1,0 +1,20 @@
+[project]
+name = "orqen-proxy"
+version = "0.0.0"
+description = "Orqen LLM proxy: the only route from sandboxes to model providers. Holds the real API keys, meters and limits every call."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "orqen-core",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+]
+
+[tool.uv.sources]
+orqen-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orqen_proxy"]
