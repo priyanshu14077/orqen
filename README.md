@@ -637,9 +637,18 @@ A test job must survive a worker crash. With Redis lists (`LPUSH` and `BRPOP`), 
 
 Kafka also gives these guarantees, but it adds partitions, retention settings and a second system to run. Orqen needs Redis anyway for counters, rate limits and pub/sub, so Kafka buys nothing at this scale.
 
-All tenants share one set of streams, and every payload carries `tenant_id`. Per-tenant streams were rejected: each worker would read N streams, and fairness would still need its own logic. M7 handles fairness with a per-tenant admission cap instead.
+All tenants share one set of streams, and every payload carries `tenant_id`. Per-tenant streams were rejected: each worker would read N streams, and fairness would still need its own logic. A per-tenant admission cap will handle fairness instead.
 
 Delivery is at least once, so every consumer must be idempotent. Redis runs with AOF (`appendfsync everysec`), so a Redis restart doesn't drop unacknowledged entries. Live progress uses pub/sub. Pub/sub can drop messages, which is acceptable because Postgres and the status hash hold the real state.
+
+### Supabase hosts Postgres and Auth
+
+Supabase gives Orqen a managed Postgres, user accounts and JWTs on its free tier, plus `pgvector` for later. Orqen uses only those parts. It doesn't use the Data API, Supabase's migration tool or row-level security through Supabase roles.
+
+- **Auth:** Supabase Auth owns sign-up, passwords and sessions. `users.id` equals `auth.users.id`, and a foreign key enforces that, so Orqen never stores a password. The gateway will verify Supabase JWTs.
+- **Data API off:** on Supabase, new tables in `public` are granted to the `anon` and `authenticated` roles, which anyone with the project's publishable key can use. Migration `0002` revokes those grants and stops future tables from receiving them.
+- **Two connections:** the app uses the session pooler, which works on IPv4 and keeps session state. Migrations use the direct connection, as Supabase recommends.
+- **Tests stay local:** the integration tests rebuild their database on every run, so they run against a disposable Postgres container, never against Supabase.
 
 ### Orqen runs its own agent loop
 
