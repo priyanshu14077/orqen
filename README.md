@@ -448,7 +448,7 @@ flowchart BT
     gateway["orqen_gateway"] --> core
     proxy["orqen_proxy"] --> core
     workers["orqen_workers"] --> core
-    sandbox["sandbox image (M3)"] --> harness
+    sandbox["sandbox image (planned)"] --> harness
 ```
 
 `orqen_harness` deliberately depends on nothing server-side, so the sandbox image installs it without Postgres drivers, Redis clients or secrets.
@@ -533,7 +533,7 @@ classDiagram
         +system: str
     }
     class ClaudeAdapter {
-        <<M1>>
+        <<planned>>
     }
     ModelAdapter <|.. ClaudeAdapter
     ModelAdapter ..> Message
@@ -550,11 +550,10 @@ classDiagram
 | `services/gateway` | Auth, submissions, WebSocket live updates |
 | `services/proxy` | The LLM proxy: holds the real provider keys, meters and limits every call |
 | `services/workers` | One `orqen-workers` command for the orchestrator, executor, grader and watchdog |
-| `sandbox/` | The sandbox image (M3) |
-| `web/` | The frontend (M8) |
+| `sandbox/` | The sandbox image (planned) |
+| `web/` | The frontend (planned) |
 | `migrations/` | Alembic migrations, written by hand. Autogenerate is not used |
 | `scripts/seed.py` | Dev seed that is safe to rerun |
-| `infra/` | Postgres init scripts for compose |
 
 ---
 
