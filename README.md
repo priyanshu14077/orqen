@@ -247,13 +247,30 @@ Rules that follow from this:
 
 ## 7. Data model
 
-Built in M0 as migration `0001`. Every table owned by a tenant has a `tenant_id`, and each child table references its parent by `(tenant_id, id)`. That composite foreign key makes it impossible to point at another tenant's row.
+Built by migrations `0001` to `0004`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
+
+| Schema | Tables | Holds |
+|---|---|---|
+| `identity` | `tenants`, `users`, `memberships` | Who someone is and their role: `admin`, `setter` or `contestant` |
+| `authoring` | `problems`, `problem_authors`, `eval_rules`, `calibration_examples`, `test_cases` | What setters write |
+| `judging` | `submissions`, `test_results` | What contestants send and how it scored |
+| `competition` | `contests`, `contest_problems`, `contest_standings`, `practice_bests` | Contests and both leaderboards |
+| `billing` | `plans`, `subscriptions`, `usage_periods`, `model_prices`, `paddle_events` | Plans, credit and Paddle webhooks |
+| `ops` | `llm_usage`, `audit_log` | Append-only records |
+
+Every table owned by a tenant has a `tenant_id`, and each child table references its parent by `(tenant_id, id)`. That composite foreign key makes it impossible to point at another tenant's row. Orqen runs as one platform in a single tenant today, and the tenant columns let organisations be added later without a schema rewrite. `billing.plans`, `billing.model_prices` and `billing.paddle_events` are platform-wide and have no `tenant_id`.
+
+The roles nest: an admin can do everything a setter can, and a setter everything a contestant can.
+
+### Authoring and judging
 
 ```mermaid
 erDiagram
     TENANTS ||--o{ MEMBERSHIPS : has
     USERS ||--o{ MEMBERSHIPS : joins
     TENANTS ||--o{ PROBLEMS : owns
+    PROBLEMS ||--o{ PROBLEM_AUTHORS : "written by"
+    MEMBERSHIPS ||--o{ PROBLEM_AUTHORS : writes
     PROBLEMS ||--o{ EVAL_RULES : "versioned by"
     EVAL_RULES ||--o{ CALIBRATION_EXAMPLES : "calibrated by"
     PROBLEMS ||--o{ TEST_CASES : contains
@@ -262,71 +279,62 @@ erDiagram
     EVAL_RULES ||--o{ SUBMISSIONS : "judged under"
     SUBMISSIONS ||--o{ TEST_RESULTS : produces
     TEST_CASES ||--o{ TEST_RESULTS : "graded in"
-    TENANTS ||--o{ LLM_USAGE : "billed for"
-    TENANTS ||--o{ AUDIT_LOG : records
 
     TENANTS {
         uuid id PK
         text slug UK
-        text name
         jsonb settings
-        bytea provider_key_enc "BYOK, later"
+        bytea provider_key_enc "bring your own key, planned"
     }
     USERS {
-        uuid id PK
+        uuid id PK, FK "= auth.users.id"
         text email UK
-        text password_hash
         bool is_platform_owner
     }
     MEMBERSHIPS {
         uuid tenant_id PK, FK
         uuid user_id PK, FK
-        text role "admin | member"
+        text role "admin | setter | contestant"
     }
     PROBLEMS {
         uuid id PK
-        uuid tenant_id FK
         text slug "unique per tenant"
         text_array kinds "prompt, code"
         text_array models_allowed
-        int time_limit_ms
         int token_budget_per_test
-        int max_steps
+        numeric pass_mark "accepted at score >= pass_mark"
+        text visibility "draft | published"
+    }
+    PROBLEM_AUTHORS {
+        uuid problem_id PK, FK
+        uuid user_id PK, FK
     }
     EVAL_RULES {
         uuid id PK
-        uuid problem_id FK
         int version "never edited; edits add N+1"
         jsonb spec "gates + judge criteria"
         text status "one active per problem"
-        numeric calibration_agreement
     }
     CALIBRATION_EXAMPLES {
         uuid id PK
-        uuid eval_rule_id FK
-        jsonb output
         numeric expected_score
         bool is_canary
     }
     TEST_CASES {
         uuid id PK
-        uuid problem_id FK
         int ordinal
-        jsonb input
         jsonb expected "never sent to a sandbox"
         bool is_sample
         int weight
     }
     SUBMISSIONS {
         uuid id PK
-        uuid user_id FK
-        uuid problem_id FK
+        uuid contest_id FK "null for practice"
         uuid eval_rule_id FK "pinned version"
-        text kind "prompt | code"
         text mode "run | submit"
         text status
-        numeric score
-        int total_tokens
+        numeric score "0 to 1"
+        bool ranked "false on your own problem"
         text idempotency_key
     }
     TEST_RESULTS {
@@ -334,22 +342,76 @@ erDiagram
         uuid test_case_id PK, FK
         text verdict
         numeric score
-        jsonb criterion_scores
-        int queue_wait_ms
+        text judge_reason "never shown to contestants"
     }
-    LLM_USAGE {
-        bigint id PK
-        uuid tenant_id FK
-        text purpose "agent | judge"
-        int input_tokens
-        int output_tokens
+```
+
+The primary key of `TEST_RESULTS` is what removes duplicates during fan-in. A submission to a problem in `PROBLEM_AUTHORS` for the same user is stored with `ranked = false` and never reaches a leaderboard.
+
+### Competition and billing
+
+```mermaid
+erDiagram
+    CONTESTS ||--o{ CONTEST_PROBLEMS : lists
+    PROBLEMS ||--o{ CONTEST_PROBLEMS : "appears in"
+    CONTEST_PROBLEMS ||--o{ SUBMISSIONS : receives
+    CONTEST_PROBLEMS ||--o{ CONTEST_STANDINGS : "ranked in"
+    MEMBERSHIPS ||--o{ CONTEST_STANDINGS : holds
+    PROBLEMS ||--o{ PRACTICE_BESTS : "ranked in"
+    MEMBERSHIPS ||--o{ PRACTICE_BESTS : holds
+    PLANS ||--o{ SUBSCRIPTIONS : "chosen in"
+    MEMBERSHIPS ||--o{ SUBSCRIPTIONS : pays
+    SUBSCRIPTIONS ||--o{ USAGE_PERIODS : meters
+
+    CONTESTS {
+        uuid id PK
+        text slug "unique per tenant"
+        timestamptz starts_at
+        timestamptz ends_at
+        int max_submits_per_problem
+        int penalty_minutes "default 20"
     }
-    AUDIT_LOG {
-        bigint id PK
-        uuid tenant_id FK
-        uuid actor_id FK
-        text action
-        jsonb diff
+    CONTEST_PROBLEMS {
+        uuid contest_id PK, FK
+        uuid problem_id PK, FK
+        text label "A, B, ..."
+    }
+    CONTEST_STANDINGS {
+        uuid contest_id PK, FK
+        uuid user_id PK, FK
+        uuid problem_id PK, FK
+        int rejected_before_accept
+        numeric best_score
+        timestamptz accepted_at
+    }
+    PRACTICE_BESTS {
+        uuid problem_id PK, FK
+        uuid user_id PK, FK
+        numeric best_score
+        timestamptz reached_at "breaks ties"
+    }
+    PLANS {
+        text id PK "free_trial | pro"
+        numeric price_usd
+        numeric credit_usd
+        int period_days "trial only"
+        int submission_cap "trial only"
+        int runs_per_hour
+    }
+    SUBSCRIPTIONS {
+        uuid id PK
+        uuid user_id FK
+        text plan_id FK
+        text status "trialing | active | past_due | canceled | expired"
+        timestamptz current_period_end
+        text paddle_subscription_id UK
+    }
+    USAGE_PERIODS {
+        uuid subscription_id PK, FK
+        timestamptz period_start PK
+        numeric credit_usd
+        numeric spent_usd
+        int submissions
     }
 ```
 
