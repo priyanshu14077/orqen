@@ -2,9 +2,9 @@
 
 [![ci](https://github.com/priyanshu14077/orqen/actions/workflows/ci.yml/badge.svg)](https://github.com/priyanshu14077/orqen/actions/workflows/ci.yml)
 
-**An online judge for AI agents, like Codeforces but for agents.** Tenant admins publish problems with versioned eval rules. Members submit a **prompt spec** or **agent code**. Every test case runs in a Docker sandbox with no network access except a metering LLM proxy. Work moves through Redis Streams, Postgres decides when a submission is complete, and results stream to the browser over WebSockets.
+**An online judge for AI agents, like Codeforces but for agents.** Setters publish problems with versioned eval rules. Contestants submit a **prompt spec** or **agent code**, in the practice archive or in timed contests. Every test case runs in a Docker sandbox with no network access except a metering LLM proxy. Work moves through Redis Streams, Postgres decides when a submission is complete, and results stream to the browser over WebSockets.
 
-> **Status:** M0 (foundation) is merged. The diagrams below show the target design. Parts that aren't built yet are marked with the milestone that adds them.
+> **Status:** the foundation is built: workspace, schema, seed, stream setup and CI. The diagrams show the target design. Parts that aren't built yet are marked *planned*.
 
 ---
 
@@ -19,10 +19,9 @@
 7. [Data model](#7-data-model)
 8. [Code structure](#8-code-structure)
 9. [Redis keyspace and streams](#9-redis-keyspace-and-streams)
-10. [Quick start](#10-quick-start)
+10. [Set up and run](#10-set-up-and-run)
 11. [Conventions](#11-conventions)
 12. [Design decisions](#12-design-decisions)
-13. [Milestones](#13-milestones)
 
 ---
 
@@ -47,7 +46,7 @@
 ```mermaid
 flowchart LR
     subgraph clients["Clients"]
-        browser["Browser<br/>(Next.js, M8)"]
+        browser["Browser<br/>(Next.js, planned)"]
         admin["Tenant admin<br/>(rules, problems)"]
     end
 
@@ -76,10 +75,12 @@ flowchart LR
         proxy["LLM proxy<br/>holds the real API key,<br/>meters every call"]
     end
 
-    pg[("Postgres 16<br/>source of truth")]
+    pg[("Supabase Postgres<br/>source of truth")]
+    sbauth(["Supabase Auth<br/>users, sessions, JWTs"])
     llm(["Anthropic API"])
 
-    browser -- "POST /submissions" --> gw
+    browser -- "sign in" --> sbauth
+    browser -- "POST /submissions<br/>(Supabase JWT)" --> gw
     admin -- "eval rules" --> gw
     browser <-. "WebSocket events" .-> gw
     gw -- "INSERT" --> pg
@@ -246,13 +247,30 @@ Rules that follow from this:
 
 ## 7. Data model
 
-Built in M0 as migration `0001`. Every table owned by a tenant has a `tenant_id`, and each child table references its parent by `(tenant_id, id)`. That composite foreign key makes it impossible to point at another tenant's row.
+Built by migrations `0001` to `0004`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
+
+| Schema | Tables | Holds |
+|---|---|---|
+| `identity` | `tenants`, `users`, `memberships` | Who someone is and their role: `admin`, `setter` or `contestant` |
+| `authoring` | `problems`, `problem_authors`, `eval_rules`, `calibration_examples`, `test_cases` | What setters write |
+| `judging` | `submissions`, `test_results` | What contestants send and how it scored |
+| `competition` | `contests`, `contest_problems`, `contest_standings`, `practice_bests` | Contests and both leaderboards |
+| `billing` | `plans`, `subscriptions`, `usage_periods`, `model_prices`, `paddle_events` | Plans, credit and Paddle webhooks |
+| `ops` | `llm_usage`, `audit_log` | Append-only records |
+
+Every table owned by a tenant has a `tenant_id`, and each child table references its parent by `(tenant_id, id)`. That composite foreign key makes it impossible to point at another tenant's row. Orqen runs as one platform in a single tenant today, and the tenant columns let organisations be added later without a schema rewrite. `billing.plans`, `billing.model_prices` and `billing.paddle_events` are platform-wide and have no `tenant_id`.
+
+The roles nest: an admin can do everything a setter can, and a setter everything a contestant can.
+
+### Authoring and judging
 
 ```mermaid
 erDiagram
     TENANTS ||--o{ MEMBERSHIPS : has
     USERS ||--o{ MEMBERSHIPS : joins
     TENANTS ||--o{ PROBLEMS : owns
+    PROBLEMS ||--o{ PROBLEM_AUTHORS : "written by"
+    MEMBERSHIPS ||--o{ PROBLEM_AUTHORS : writes
     PROBLEMS ||--o{ EVAL_RULES : "versioned by"
     EVAL_RULES ||--o{ CALIBRATION_EXAMPLES : "calibrated by"
     PROBLEMS ||--o{ TEST_CASES : contains
@@ -261,71 +279,62 @@ erDiagram
     EVAL_RULES ||--o{ SUBMISSIONS : "judged under"
     SUBMISSIONS ||--o{ TEST_RESULTS : produces
     TEST_CASES ||--o{ TEST_RESULTS : "graded in"
-    TENANTS ||--o{ LLM_USAGE : "billed for"
-    TENANTS ||--o{ AUDIT_LOG : records
 
     TENANTS {
         uuid id PK
         text slug UK
-        text name
         jsonb settings
-        bytea provider_key_enc "BYOK, later"
+        bytea provider_key_enc "bring your own key, planned"
     }
     USERS {
-        uuid id PK
+        uuid id PK, FK "= auth.users.id"
         text email UK
-        text password_hash
         bool is_platform_owner
     }
     MEMBERSHIPS {
         uuid tenant_id PK, FK
         uuid user_id PK, FK
-        text role "admin | member"
+        text role "admin | setter | contestant"
     }
     PROBLEMS {
         uuid id PK
-        uuid tenant_id FK
         text slug "unique per tenant"
         text_array kinds "prompt, code"
         text_array models_allowed
-        int time_limit_ms
         int token_budget_per_test
-        int max_steps
+        numeric pass_mark "accepted at score >= pass_mark"
+        text visibility "draft | published"
+    }
+    PROBLEM_AUTHORS {
+        uuid problem_id PK, FK
+        uuid user_id PK, FK
     }
     EVAL_RULES {
         uuid id PK
-        uuid problem_id FK
         int version "never edited; edits add N+1"
         jsonb spec "gates + judge criteria"
         text status "one active per problem"
-        numeric calibration_agreement
     }
     CALIBRATION_EXAMPLES {
         uuid id PK
-        uuid eval_rule_id FK
-        jsonb output
         numeric expected_score
         bool is_canary
     }
     TEST_CASES {
         uuid id PK
-        uuid problem_id FK
         int ordinal
-        jsonb input
         jsonb expected "never sent to a sandbox"
         bool is_sample
         int weight
     }
     SUBMISSIONS {
         uuid id PK
-        uuid user_id FK
-        uuid problem_id FK
+        uuid contest_id FK "null for practice"
         uuid eval_rule_id FK "pinned version"
-        text kind "prompt | code"
         text mode "run | submit"
         text status
-        numeric score
-        int total_tokens
+        numeric score "0 to 1"
+        bool ranked "false on your own problem"
         text idempotency_key
     }
     TEST_RESULTS {
@@ -333,26 +342,98 @@ erDiagram
         uuid test_case_id PK, FK
         text verdict
         numeric score
-        jsonb criterion_scores
-        int queue_wait_ms
-    }
-    LLM_USAGE {
-        bigint id PK
-        uuid tenant_id FK
-        text purpose "agent | judge"
-        int input_tokens
-        int output_tokens
-    }
-    AUDIT_LOG {
-        bigint id PK
-        uuid tenant_id FK
-        uuid actor_id FK
-        text action
-        jsonb diff
+        text judge_reason "never shown to contestants"
     }
 ```
 
-The primary key of `TEST_RESULTS` is what removes duplicates during fan-in. The application role `orqen_app` can only insert into `LLM_USAGE` and `AUDIT_LOG`, never update or delete.
+The primary key of `TEST_RESULTS` is what removes duplicates during fan-in. A submission to a problem in `PROBLEM_AUTHORS` for the same user is stored with `ranked = false` and never reaches a leaderboard.
+
+### Competition and billing
+
+```mermaid
+erDiagram
+    CONTESTS ||--o{ CONTEST_PROBLEMS : lists
+    PROBLEMS ||--o{ CONTEST_PROBLEMS : "appears in"
+    CONTEST_PROBLEMS ||--o{ SUBMISSIONS : receives
+    CONTEST_PROBLEMS ||--o{ CONTEST_STANDINGS : "ranked in"
+    MEMBERSHIPS ||--o{ CONTEST_STANDINGS : holds
+    PROBLEMS ||--o{ PRACTICE_BESTS : "ranked in"
+    MEMBERSHIPS ||--o{ PRACTICE_BESTS : holds
+    PLANS ||--o{ SUBSCRIPTIONS : "chosen in"
+    MEMBERSHIPS ||--o{ SUBSCRIPTIONS : pays
+    SUBSCRIPTIONS ||--o{ USAGE_PERIODS : meters
+
+    CONTESTS {
+        uuid id PK
+        text slug "unique per tenant"
+        timestamptz starts_at
+        timestamptz ends_at
+        int max_submits_per_problem
+        int penalty_minutes "default 20"
+    }
+    CONTEST_PROBLEMS {
+        uuid contest_id PK, FK
+        uuid problem_id PK, FK
+        text label "A, B, ..."
+    }
+    CONTEST_STANDINGS {
+        uuid contest_id PK, FK
+        uuid user_id PK, FK
+        uuid problem_id PK, FK
+        int rejected_before_accept
+        numeric best_score
+        timestamptz accepted_at
+    }
+    PRACTICE_BESTS {
+        uuid problem_id PK, FK
+        uuid user_id PK, FK
+        numeric best_score
+        timestamptz reached_at "breaks ties"
+    }
+    PLANS {
+        text id PK "free_trial | pro"
+        numeric price_usd
+        numeric credit_usd
+        int period_days "trial only"
+        int submission_cap "trial only"
+        int runs_per_hour
+    }
+    SUBSCRIPTIONS {
+        uuid id PK
+        uuid user_id FK
+        text plan_id FK
+        text status "trialing | active | past_due | canceled | expired"
+        timestamptz current_period_end
+        text paddle_subscription_id UK
+    }
+    USAGE_PERIODS {
+        uuid subscription_id PK, FK
+        timestamptz period_start PK
+        numeric credit_usd
+        numeric spent_usd
+        int submissions
+    }
+```
+
+Contests rank ICPC-style: most problems accepted first, then the lowest penalty. A problem's penalty is the minutes from `starts_at` to `accepted_at`, plus `penalty_minutes` for each rejected submit before it. A user has at most one live subscription, and one free trial ever; two partial unique indexes on `SUBSCRIPTIONS` enforce both. `PADDLE_EVENTS` is keyed by Paddle's event id, so a redelivered webhook inserts nothing. `MODEL_PRICES` holds the per-model token prices the proxy uses to turn tokens into dollars.
+
+### Database roles and row-level security
+
+Migration `0004` turns on row-level security for every table. Services connect as the table owner and switch to one of four roles for each transaction. None of them owns a table, so the policies apply to all of them.
+
+| Role | Acts for | Can |
+|---|---|---|
+| `orqen_contestant` | A signed-in user | Read listed problems and their sample tests, submit as themselves, read their own submissions and results, read leaderboards |
+| `orqen_setter` | A setter | Everything a contestant can, plus write problems, tests and eval rules for problems they author |
+| `orqen_admin` | An admin | Everything a setter can, plus read and manage everything in the tenant |
+| `orqen_worker` | Orchestrator, executors, grader, proxy, webhooks | Read the tenant's problems and hidden tests, write results, standings and usage |
+
+The human roles nest through role membership, so a policy written for `orqen_contestant` also covers setters and admins. Policies read the tenant and user from `app.tenant_id` and `app.user_id`. Some rules can't be expressed as row filters, so grants and triggers enforce them:
+
+- A contestant inserts a submission through a column grant that leaves out `score`, `status`, `ranked` and `eval_rule_id`. A trigger pins the active eval rule and sets `ranked = false` when the submitter authored the problem.
+- A contestant can read the verdict and score of every test in their submission, but `output`, `judge_reason` and the other detail columns aren't granted. `judging.sample_test_outputs` returns those columns for sample tests only.
+- A problem in a contest that hasn't started is hidden. While a contest runs, its problems take contest submissions only. After it ends, every contest submission becomes readable, and the problems return to the practice archive.
+- No role can update or delete `ops.llm_usage`.
 
 ---
 
@@ -367,7 +448,7 @@ flowchart BT
     gateway["orqen_gateway"] --> core
     proxy["orqen_proxy"] --> core
     workers["orqen_workers"] --> core
-    sandbox["sandbox image (M3)"] --> harness
+    sandbox["sandbox image (planned)"] --> harness
 ```
 
 `orqen_harness` deliberately depends on nothing server-side, so the sandbox image installs it without Postgres drivers, Redis clients or secrets.
@@ -452,7 +533,7 @@ classDiagram
         +system: str
     }
     class ClaudeAdapter {
-        <<M1>>
+        <<planned>>
     }
     ModelAdapter <|.. ClaudeAdapter
     ModelAdapter ..> Message
@@ -469,11 +550,10 @@ classDiagram
 | `services/gateway` | Auth, submissions, WebSocket live updates |
 | `services/proxy` | The LLM proxy: holds the real provider keys, meters and limits every call |
 | `services/workers` | One `orqen-workers` command for the orchestrator, executor, grader and watchdog |
-| `sandbox/` | The sandbox image (M3) |
-| `web/` | The frontend (M8) |
+| `sandbox/` | The sandbox image (planned) |
+| `web/` | The frontend (planned) |
 | `migrations/` | Alembic migrations, written by hand. Autogenerate is not used |
 | `scripts/seed.py` | Dev seed that is safe to rerun |
-| `infra/` | Postgres init scripts for compose |
 
 ---
 
@@ -502,27 +582,39 @@ The WebSocket snapshot race is handled in this order: subscribe first, then read
 
 ---
 
-## 10. Quick start
+## 10. Set up and run
 
-You need Docker, [uv](https://docs.astral.sh/uv/) and Python 3.12. uv downloads Python if it's missing.
+You need Docker, [uv](https://docs.astral.sh/uv/), Python 3.12 (uv downloads it if it's missing) and a Supabase project. Docker runs only Redis and the throwaway test database. The application database and user accounts live in Supabase.
+
+### Run locally
+
+1. Copy `.env.example` to `.env` and replace the `<...>` placeholders with your Supabase project's session pooler URL, project URL and secret key (`sb_secret_...`). Leave `ORQEN_MIGRATION_DATABASE_URL` commented out unless your network has IPv6.
+2. Apply the schema and seed the `orqen` tenant, its owner and two contestants:
+
+   ```sh
+   make install
+   make migrate          # alembic upgrade head on Supabase
+   make seed             # safe to rerun
+   ```
+
+3. Start the services:
+
+   ```sh
+   make up           # Redis on localhost:6380
+   make streams      # create the Redis streams and consumer groups
+   make gateway      # http://localhost:8000/readyz checks Supabase and Redis
+   ```
+
+`make help` lists every target.
+
+### Run the tests
 
 ```sh
-cp .env.example .env
-make install
-make setup        # start Postgres + Redis, migrate, seed, create stream groups
-make check        # ruff, mypy, tests: the same checks CI runs
-make gateway      # http://localhost:8000/readyz
+make up test-db   # Redis, plus Postgres on localhost:5433
+make check        # ruff, mypy and pytest: the same checks CI runs
 ```
 
-`make help` lists every target. Postgres listens on host port **5433** and Redis on **6380**, so they don't collide with other local instances. Change `ORQEN_PG_PORT` and `ORQEN_REDIS_PORT` in `.env` if needed.
-
-Seeded logins, all with password `orqen-dev-password`:
-
-| Email | Role |
-|---|---|
-| `owner@orqen.test` | Platform owner |
-| `admin@acme.test`, `admin@globex.test` | Tenant admin |
-| `member@acme.test`, `member@globex.test` | Member |
+The integration tests drop and rebuild their database on every run. `tests/conftest.py` refuses any database whose name doesn't end in `_test` or whose URL contains `supabase`, so a misconfigured `.env` can't wipe Supabase. Before migrating, the tests add the Supabase objects that migration `0002` reacts to: the `anon` and `authenticated` roles and an `auth.users` table.
 
 ---
 
@@ -531,7 +623,7 @@ Seeded logins, all with password `orqen-dev-password`:
 - **Redis keys and stream names** come only from `orqen_core.keys` and `orqen_core.streams`.
 - **Stream payloads** are `StreamMessage` subclasses, stored as `{v, data}`. Bump `schema_version` when a payload changes shape.
 - **Enums and SQL CHECK constraints** are defined in both places. `tests/unit/test_models.py` fails if they drift apart.
-- **Tenant-scoped queries** run inside `orqen_core.db.tenant_tx`, which switches to the non-owner `orqen_app` role and sets `app.tenant_id` for that transaction only.
+- **Every query from a request or a job** runs inside `orqen_core.db.tenant_tx`, which switches to the caller's database role and sets `app.tenant_id` and `app.user_id` for that transaction only.
 - **Logs** are JSON lines. `trace_id` arrives in the `X-Trace-ID` header and travels in every stream payload.
 - **Migrations** are hand-written SQL. Never autogenerate them: autogenerate would silently drop the CHECK constraints, partial indexes and RLS policies.
 
@@ -545,9 +637,18 @@ A test job must survive a worker crash. With Redis lists (`LPUSH` and `BRPOP`), 
 
 Kafka also gives these guarantees, but it adds partitions, retention settings and a second system to run. Orqen needs Redis anyway for counters, rate limits and pub/sub, so Kafka buys nothing at this scale.
 
-All tenants share one set of streams, and every payload carries `tenant_id`. Per-tenant streams were rejected: each worker would read N streams, and fairness would still need its own logic. M7 handles fairness with a per-tenant admission cap instead.
+All tenants share one set of streams, and every payload carries `tenant_id`. Per-tenant streams were rejected: each worker would read N streams, and fairness would still need its own logic. A per-tenant admission cap will handle fairness instead.
 
 Delivery is at least once, so every consumer must be idempotent. Redis runs with AOF (`appendfsync everysec`), so a Redis restart doesn't drop unacknowledged entries. Live progress uses pub/sub. Pub/sub can drop messages, which is acceptable because Postgres and the status hash hold the real state.
+
+### Supabase hosts Postgres and Auth
+
+Supabase gives Orqen a managed Postgres, user accounts and JWTs on its free tier, plus `pgvector` for later. Orqen uses only those parts. It doesn't use the Data API, Supabase's migration tool or row-level security through Supabase roles.
+
+- **Auth:** Supabase Auth owns sign-up, passwords and sessions. `users.id` equals `auth.users.id`, and a foreign key enforces that, so Orqen never stores a password. The gateway will verify Supabase JWTs.
+- **Data API off:** on Supabase, new tables in `public` are granted to the `anon` and `authenticated` roles, which anyone with the project's publishable key can use. Migration `0002` revokes those grants and stops future tables from receiving them.
+- **Two connections:** the app uses the session pooler, which works on IPv4 and keeps session state. Migrations use the direct connection, as Supabase recommends.
+- **Tests stay local:** the integration tests rebuild their database on every run, so they run against a disposable Postgres container, never against Supabase.
 
 ### Orqen runs its own agent loop
 
@@ -576,34 +677,3 @@ RETURNING id;
 ```
 
 A redelivery after a crash runs the count again and completes the submission. The conditional `UPDATE` lets exactly one grader win. Each result costs one extra `count(*)`, which the primary key index serves. Completion no longer depends on Redis agreeing with Postgres.
-
----
-
-## 13. Milestones
-
-```mermaid
-flowchart LR
-    M0["M0<br/>Foundation"]:::done --> M1["M1<br/>Agent loop +<br/>Claude adapter"]
-    M1 --> M2["M2<br/>LLM proxy,<br/>run tokens"]
-    M2 --> M3["M3<br/>Sandbox"]
-    M3 --> M4["M4<br/>Submission<br/>pipeline"]
-    M4 --> M5["M5<br/>WebSocket<br/>live updates"]
-    M5 --> M6["M6<br/>Eval rules +<br/>LLM judge"]
-    M6 --> M7["M7<br/>RLS, fairness,<br/>budgets"]
-    M7 --> M8["M8<br/>Frontend"]
-    M8 --> M9["M9<br/>DLQ, load<br/>testing"]
-    classDef done fill:#2da44e,color:#fff,stroke:#1a7f37
-```
-
-| | Scope | Exit test |
-|---|---|---|
-| **M0** ✅ | Workspace, compose, schema, seed, CI | `make setup check` passes on a fresh clone |
-| M1 | Agent loop with the Claude adapter | Task JSON on stdin gives answer and token usage on stdout |
-| M2 | Proxy speaking the Anthropic Messages format, run tokens, budgets, fake provider | Harness works with no real key; an exhausted budget gives `BUDGET` |
-| M3 | Sandbox image, one-shot executor | Network, fork-bomb, memory and timeout attacks are all contained |
-| M4 | Gateway, orchestrator, executors, deterministic graders, fan-in, watchdog | `kill -9` an executor mid-run; the submission still completes with no duplicate results |
-| M5 | WebSocket tickets, pub/sub, `seq`, snapshot | A client on gateway B sees work started through gateway A |
-| M6 | Versioned eval rules, gates, judge, calibration and canary checks | An injected output scores low; an uncalibrated rule can't be activated |
-| M7 | Row-level security, per-tenant caps and budgets | Cross-tenant reads return nothing; one tenant's flood doesn't delay another |
-| M8 | Next.js UI and admin rule editor | Playwright: submit, watch live, see rank |
-| M9 | DLQ replay, retries, k6 against the fake provider | 50 × 20-test submissions with p95 under 3 min and nothing lost |

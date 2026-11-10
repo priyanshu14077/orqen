@@ -14,9 +14,15 @@ build/
 node_modules/
 .next/
 
-# Internal docs: PRDs, ADRs, plans and agent notes stay local.
-# Public documentation lives in README.md.
+# Engineering docs stay local. README.md is the only public document.
+#   docs/internal/    guides, PRD, ADRs, plans
+#   docs/milestones/  roadmap and milestone status
 docs/
+docs/internal/
+docs/milestones/
 CLAUDE.md
 AGENTS.md
 .claude/
+
+# Local tool state
+.serena/

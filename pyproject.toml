@@ -10,11 +10,11 @@ dependencies = [
     "orqen-proxy",
     "orqen-workers",
     "alembic>=1.14",
+    "httpx>=0.28",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28",
     "mypy>=1.13",
     "pytest>=8.3",
     "pytest-asyncio>=0.25",

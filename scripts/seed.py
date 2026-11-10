@@ -1,9 +1,13 @@
-"""Seed a development database: 2 tenants, an admin and a member in each, a platform
-owner, and one problem per tenant with 3 sample and 5 hidden tests plus an active
-eval rule.
+"""Seed a development database: the single `orqen` tenant, the platform owner as its
+admin and the author of one starter problem (3 sample and 5 hidden tests plus an active
+eval rule), and two contestants on a free trial.
 
-Idempotent: ids are derived from names (uuid5), and every insert is
-ON CONFLICT DO NOTHING, so running it twice changes nothing.
+Users come from an `AuthProvider`. Against Supabase, `SupabaseAuth` creates them in
+Supabase Auth through the admin API, and their Auth ids become `users.id`. Against
+plain Postgres, such as CI, `StaticIds` derives the ids from the email instead.
+
+Idempotent: every insert is ON CONFLICT DO NOTHING and Supabase users are looked up
+before they are created, so running it twice changes nothing.
 
     uv run python -m scripts.seed
 """
@@ -12,18 +16,24 @@ import asyncio
 import json
 import os
 import sys
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from orqen_core.db import make_engine
-from orqen_core.security import hash_password
+from orqen_core.models import Role
 from orqen_core.settings import get_settings
 
 SEED_PASSWORD = os.environ.get("ORQEN_SEED_PASSWORD", "orqen-dev-password")
-TENANTS = [("acme", "Acme Corp"), ("globex", "Globex")]
+TENANT = "orqen"
+OWNER = "owner@orqen.test"
+CONTESTANTS = ("alice@orqen.test", "bob@orqen.test")
+# Fixed, so a second run inserts nothing new.
+TRIAL_START = datetime(2026, 11, 10, tzinfo=UTC)
 PROBLEM_SLUG = "invoice-extractor"
 MODEL = "claude-haiku-4-5"
 
@@ -101,6 +111,50 @@ EVAL_RULE_V1: dict[str, Any] = {
 }
 
 
+class AuthProvider(Protocol):
+    async def ensure_user(self, email: str) -> UUID:
+        """Return the auth user id for `email`, creating the user if needed."""
+        ...
+
+
+class StaticIds:
+    """Plain Postgres has no auth service: derive a stable id from the email."""
+
+    async def ensure_user(self, email: str) -> UUID:
+        return sid("user", email)
+
+
+class SupabaseAuth:
+    """Creates users through the Supabase Auth admin API with the secret key."""
+
+    def __init__(self, url: str, secret_key: str, password: str) -> None:
+        headers = {"apikey": secret_key}
+        if secret_key.startswith("eyJ"):  # a legacy service_role JWT also needs Bearer
+            headers["Authorization"] = f"Bearer {secret_key}"
+        self._client = httpx.AsyncClient(
+            base_url=f"{url.rstrip('/')}/auth/v1/admin", headers=headers, timeout=15
+        )
+        self._password = password
+        self._existing: dict[str, UUID] | None = None
+
+    async def ensure_user(self, email: str) -> UUID:
+        if self._existing is None:
+            resp = await self._client.get("/users", params={"page": 1, "per_page": 1000})
+            resp.raise_for_status()
+            self._existing = {u["email"]: UUID(u["id"]) for u in resp.json()["users"]}
+        if email not in self._existing:
+            resp = await self._client.post(
+                "/users",
+                json={"email": email, "password": self._password, "email_confirm": True},
+            )
+            resp.raise_for_status()
+            self._existing[email] = UUID(resp.json()["id"])
+        return self._existing[email]
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+
 async def insert(conn: AsyncConnection, table: str, row: dict[str, Any]) -> None:
     cols = ", ".join(row)
     params = ", ".join(f":{c}" for c in row)
@@ -109,95 +163,156 @@ async def insert(conn: AsyncConnection, table: str, row: dict[str, Any]) -> None
     )
 
 
-async def seed(conn: AsyncConnection) -> None:
-    pw = hash_password(SEED_PASSWORD)
+async def seed(conn: AsyncConnection, auth: AuthProvider) -> None:
+    """The platform: the `orqen` tenant, its owner, two contestants and one problem."""
+    await seed_tenant(conn, auth, TENANT, "Orqen", OWNER, CONTESTANTS, platform_owner=True)
+
+
+async def seed_tenant(
+    conn: AsyncConnection,
+    auth: AuthProvider,
+    slug: str,
+    name: str,
+    admin_email: str,
+    contestant_emails: tuple[str, ...],
+    *,
+    platform_owner: bool = False,
+) -> UUID:
+    """A tenant with one admin who authors the starter problem, and contestants on a
+    free trial. Tests call this for a second tenant to check isolation."""
+    tenant_id = sid("tenant", slug)
+    await insert(conn, "identity.tenants", {"id": tenant_id, "slug": slug, "name": name})
+
+    admin_id = await add_member(conn, auth, tenant_id, admin_email, Role.ADMIN, platform_owner)
+    for email in contestant_emails:
+        user_id = await add_member(conn, auth, tenant_id, email, Role.CONTESTANT)
+        await insert(
+            conn,
+            "billing.subscriptions",
+            {
+                "id": sid("subscription", slug, email),
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "plan_id": "free_trial",
+                "status": "trialing",
+                "current_period_start": TRIAL_START,
+                "current_period_end": TRIAL_START + timedelta(days=7),
+            },
+        )
+
+    problem_id = sid("problem", slug, PROBLEM_SLUG)
     await insert(
         conn,
-        "users",
+        "authoring.problems",
         {
-            "id": sid("user", "owner"),
-            "email": "owner@orqen.test",
-            "password_hash": pw,
-            "is_platform_owner": True,
+            "id": problem_id,
+            "tenant_id": tenant_id,
+            "slug": PROBLEM_SLUG,
+            "title": "Invoice Extractor",
+            "statement_md": STATEMENT,
+            "models_allowed": [MODEL],
+            "time_limit_ms": 60_000,
+            "mem_limit_mb": 256,
+            "token_budget_per_test": 8_000,
+            "max_steps": 6,
+            "visibility": "published",
+            "created_by": admin_id,
         },
     )
-
-    for slug, name in TENANTS:
-        tenant_id = sid("tenant", slug)
-        await insert(conn, "tenants", {"id": tenant_id, "slug": slug, "name": name})
-
-        for role in ("admin", "member"):
-            user_id = sid("user", slug, role)
-            await insert(
-                conn,
-                "users",
-                {"id": user_id, "email": f"{role}@{slug}.test", "password_hash": pw},
-            )
-            await insert(
-                conn, "memberships", {"tenant_id": tenant_id, "user_id": user_id, "role": role}
-            )
-
-        problem_id = sid("problem", slug, PROBLEM_SLUG)
+    await insert(
+        conn,
+        "authoring.eval_rules",
+        {
+            "id": sid("eval_rule", slug, PROBLEM_SLUG, "1"),
+            "tenant_id": tenant_id,
+            "problem_id": problem_id,
+            "version": 1,
+            "spec": json.dumps(EVAL_RULE_V1),
+            "status": "active",
+            "created_by": admin_id,
+        },
+    )
+    for ordinal, (raw, expected, is_sample) in enumerate(TESTS, start=1):
         await insert(
             conn,
-            "problems",
+            "authoring.test_cases",
             {
-                "id": problem_id,
-                "tenant_id": tenant_id,
-                "slug": PROBLEM_SLUG,
-                "title": "Invoice Extractor",
-                "statement_md": STATEMENT,
-                "models_allowed": [MODEL],
-                "time_limit_ms": 60_000,
-                "mem_limit_mb": 256,
-                "token_budget_per_test": 8_000,
-                "max_steps": 6,
-                "visibility": "published",
-                "created_by": sid("user", slug, "admin"),
-            },
-        )
-        await insert(
-            conn,
-            "eval_rules",
-            {
-                "id": sid("eval_rule", slug, PROBLEM_SLUG, "1"),
+                "id": sid("test_case", slug, PROBLEM_SLUG, str(ordinal)),
                 "tenant_id": tenant_id,
                 "problem_id": problem_id,
-                "version": 1,
-                "spec": json.dumps(EVAL_RULE_V1),
-                "status": "active",
-                "created_by": sid("user", slug, "admin"),
+                "ordinal": ordinal,
+                "input": json.dumps({"text": raw}),
+                "expected": json.dumps(expected),
+                "is_sample": is_sample,
             },
         )
-        for ordinal, (raw, expected, is_sample) in enumerate(TESTS, start=1):
-            await insert(
-                conn,
-                "test_cases",
-                {
-                    "id": sid("test_case", slug, PROBLEM_SLUG, str(ordinal)),
-                    "tenant_id": tenant_id,
-                    "problem_id": problem_id,
-                    "ordinal": ordinal,
-                    "input": json.dumps({"text": raw}),
-                    "expected": json.dumps(expected),
-                    "is_sample": is_sample,
-                },
-            )
+    return tenant_id
 
 
-async def main(database_url: str | None = None) -> None:
-    engine = make_engine(database_url or get_settings().database_url, pool_size=1)
+async def add_member(
+    conn: AsyncConnection,
+    auth: AuthProvider,
+    tenant_id: UUID,
+    email: str,
+    role: Role,
+    platform_owner: bool = False,
+) -> UUID:
+    user_id = await auth.ensure_user(email)
+    await insert(
+        conn,
+        "identity.users",
+        {"id": user_id, "email": email, "is_platform_owner": platform_owner},
+    )
+    await insert(
+        conn,
+        "identity.memberships",
+        {"tenant_id": tenant_id, "user_id": user_id, "role": role.value},
+    )
+    return user_id
+
+
+async def has_auth_schema(conn: AsyncConnection) -> bool:
+    found = await conn.execute(
+        text("SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth'")
+    )
+    return found.first() is not None
+
+
+async def main() -> None:
+    settings = get_settings()
+    key = settings.supabase_secret_key
+    if key and key.get_secret_value().startswith("sb_publishable_"):
+        sys.exit(
+            "ORQEN_SUPABASE_SECRET_KEY holds a publishable key. The Auth admin API needs a "
+            "secret key (sb_secret_...) from Settings > API Keys."
+        )
+    engine = make_engine(settings.database_url, pool_size=1)
+    auth: AuthProvider
+    supabase: SupabaseAuth | None = None
     try:
         async with engine.begin() as conn:
-            await seed(conn)
+            if settings.supabase_url and settings.supabase_secret_key:
+                supabase = SupabaseAuth(
+                    settings.supabase_url,
+                    settings.supabase_secret_key.get_secret_value(),
+                    SEED_PASSWORD,
+                )
+                auth = supabase
+            elif await has_auth_schema(conn):
+                sys.exit(
+                    "This database has Supabase's auth schema. Set ORQEN_SUPABASE_URL and "
+                    "ORQEN_SUPABASE_SECRET_KEY so the seed can create users in Supabase Auth."
+                )
+            else:
+                auth = StaticIds()
+            await seed(conn, auth)
     finally:
+        if supabase is not None:
+            await supabase.aclose()
         await engine.dispose()
-    print(
-        f"Seeded tenants {[t for t, _ in TENANTS]}. "
-        f"Logins: owner@orqen.test, admin@<tenant>.test, member@<tenant>.test "
-        f"(password: {SEED_PASSWORD!r})",
-        file=sys.stderr,
-    )
+    logins = ", ".join((OWNER, *CONTESTANTS))
+    where = f"Supabase Auth, password {SEED_PASSWORD!r}" if supabase else "no auth service"
+    print(f"Seeded tenant {TENANT!r}. Users: {logins} ({where})", file=sys.stderr)
 
 
 if __name__ == "__main__":
