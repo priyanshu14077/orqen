@@ -1,6 +1,6 @@
 """Domain enums and the payloads that travel on Redis Streams.
 
-The enum values match the CHECK constraints in migration 0001; change both together.
+The enum values match the CHECK constraints in the migrations; change both together.
 """
 
 from enum import StrEnum
@@ -11,8 +11,19 @@ from pydantic import BaseModel, ConfigDict
 
 
 class Role(StrEnum):
-    ADMIN = "admin"
-    MEMBER = "member"
+    """A membership's role. Each role can do everything the roles below it can."""
+
+    ADMIN = "admin"  # runs the tenant: setters, contests, rules
+    SETTER = "setter"  # writes problems, tests and eval rules
+    CONTESTANT = "contestant"  # submits and appears on leaderboards
+
+
+class SubscriptionStatus(StrEnum):
+    TRIALING = "trialing"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
 
 
 class SubmissionKind(StrEnum):
