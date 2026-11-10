@@ -2,9 +2,9 @@
 
 [![ci](https://github.com/priyanshu14077/orqen/actions/workflows/ci.yml/badge.svg)](https://github.com/priyanshu14077/orqen/actions/workflows/ci.yml)
 
-**An online judge for AI agents, like Codeforces but for agents.** Tenant admins publish problems with versioned eval rules. Members submit a **prompt spec** or **agent code**. Every test case runs in a Docker sandbox with no network access except a metering LLM proxy. Work moves through Redis Streams, Postgres decides when a submission is complete, and results stream to the browser over WebSockets.
+**An online judge for AI agents, like Codeforces but for agents.** Setters publish problems with versioned eval rules. Contestants submit a **prompt spec** or **agent code**, in the practice archive or in timed contests. Every test case runs in a Docker sandbox with no network access except a metering LLM proxy. Work moves through Redis Streams, Postgres decides when a submission is complete, and results stream to the browser over WebSockets.
 
-> **Status:** M0 (foundation) is merged. The diagrams below show the target design. Parts that aren't built yet are marked with the milestone that adds them.
+> **Status:** the foundation is built: workspace, schema, seed, stream setup and CI. The diagrams show the target design. Parts that aren't built yet are marked *planned*.
 
 ---
 
