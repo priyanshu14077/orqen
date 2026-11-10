@@ -17,7 +17,11 @@ if config.config_file_name is not None:
 
 def database_url() -> str:
     # `alembic -x url=...` wins, so tests can migrate a separate database.
-    return context.get_x_argument(as_dictionary=True).get("url") or get_settings().database_url
+    override = context.get_x_argument(as_dictionary=True).get("url")
+    if override:
+        return override
+    settings = get_settings()
+    return settings.migration_database_url or settings.database_url
 
 
 def run_migrations_offline() -> None:
