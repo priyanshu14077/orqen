@@ -46,7 +46,7 @@
 ```mermaid
 flowchart LR
     subgraph clients["Clients"]
-        browser["Browser<br/>(Next.js, M8)"]
+        browser["Browser<br/>(Next.js, planned)"]
         admin["Tenant admin<br/>(rules, problems)"]
     end
 
@@ -75,10 +75,12 @@ flowchart LR
         proxy["LLM proxy<br/>holds the real API key,<br/>meters every call"]
     end
 
-    pg[("Postgres 16<br/>source of truth")]
+    pg[("Supabase Postgres<br/>source of truth")]
+    sbauth(["Supabase Auth<br/>users, sessions, JWTs"])
     llm(["Anthropic API"])
 
-    browser -- "POST /submissions" --> gw
+    browser -- "sign in" --> sbauth
+    browser -- "POST /submissions<br/>(Supabase JWT)" --> gw
     admin -- "eval rules" --> gw
     browser <-. "WebSocket events" .-> gw
     gw -- "INSERT" --> pg
