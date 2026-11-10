@@ -415,7 +415,25 @@ erDiagram
     }
 ```
 
-The primary key of `TEST_RESULTS` is what removes duplicates during fan-in. The application role `orqen_app` can only insert into `LLM_USAGE` and `AUDIT_LOG`, never update or delete.
+Contests rank ICPC-style: most problems accepted first, then the lowest penalty. A problem's penalty is the minutes from `starts_at` to `accepted_at`, plus `penalty_minutes` for each rejected submit before it. A user has at most one live subscription, and one free trial ever; two partial unique indexes on `SUBSCRIPTIONS` enforce both. `PADDLE_EVENTS` is keyed by Paddle's event id, so a redelivered webhook inserts nothing. `MODEL_PRICES` holds the per-model token prices the proxy uses to turn tokens into dollars.
+
+### Database roles and row-level security
+
+Migration `0004` turns on row-level security for every table. Services connect as the table owner and switch to one of four roles for each transaction. None of them owns a table, so the policies apply to all of them.
+
+| Role | Acts for | Can |
+|---|---|---|
+| `orqen_contestant` | A signed-in user | Read listed problems and their sample tests, submit as themselves, read their own submissions and results, read leaderboards |
+| `orqen_setter` | A setter | Everything a contestant can, plus write problems, tests and eval rules for problems they author |
+| `orqen_admin` | An admin | Everything a setter can, plus read and manage everything in the tenant |
+| `orqen_worker` | Orchestrator, executors, grader, proxy, webhooks | Read the tenant's problems and hidden tests, write results, standings and usage |
+
+The human roles nest through role membership, so a policy written for `orqen_contestant` also covers setters and admins. Policies read the tenant and user from `app.tenant_id` and `app.user_id`. Some rules can't be expressed as row filters, so grants and triggers enforce them:
+
+- A contestant inserts a submission through a column grant that leaves out `score`, `status`, `ranked` and `eval_rule_id`. A trigger pins the active eval rule and sets `ranked = false` when the submitter authored the problem.
+- A contestant can read the verdict and score of every test in their submission, but `output`, `judge_reason` and the other detail columns aren't granted. `judging.sample_test_outputs` returns those columns for sample tests only.
+- A problem in a contest that hasn't started is hidden. While a contest runs, its problems take contest submissions only. After it ends, every contest submission becomes readable, and the problems return to the practice archive.
+- No role can update or delete `ops.llm_usage`.
 
 ---
 
