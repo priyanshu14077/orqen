@@ -19,10 +19,9 @@
 7. [Data model](#7-data-model)
 8. [Code structure](#8-code-structure)
 9. [Redis keyspace and streams](#9-redis-keyspace-and-streams)
-10. [Quick start](#10-quick-start)
+10. [Set up and run](#10-set-up-and-run)
 11. [Conventions](#11-conventions)
 12. [Design decisions](#12-design-decisions)
-13. [Milestones](#13-milestones)
 
 ---
 
@@ -576,34 +575,3 @@ RETURNING id;
 ```
 
 A redelivery after a crash runs the count again and completes the submission. The conditional `UPDATE` lets exactly one grader win. Each result costs one extra `count(*)`, which the primary key index serves. Completion no longer depends on Redis agreeing with Postgres.
-
----
-
-## 13. Milestones
-
-```mermaid
-flowchart LR
-    M0["M0<br/>Foundation"]:::done --> M1["M1<br/>Agent loop +<br/>Claude adapter"]
-    M1 --> M2["M2<br/>LLM proxy,<br/>run tokens"]
-    M2 --> M3["M3<br/>Sandbox"]
-    M3 --> M4["M4<br/>Submission<br/>pipeline"]
-    M4 --> M5["M5<br/>WebSocket<br/>live updates"]
-    M5 --> M6["M6<br/>Eval rules +<br/>LLM judge"]
-    M6 --> M7["M7<br/>RLS, fairness,<br/>budgets"]
-    M7 --> M8["M8<br/>Frontend"]
-    M8 --> M9["M9<br/>DLQ, load<br/>testing"]
-    classDef done fill:#2da44e,color:#fff,stroke:#1a7f37
-```
-
-| | Scope | Exit test |
-|---|---|---|
-| **M0** ✅ | Workspace, compose, schema, seed, CI | `make setup check` passes on a fresh clone |
-| M1 | Agent loop with the Claude adapter | Task JSON on stdin gives answer and token usage on stdout |
-| M2 | Proxy speaking the Anthropic Messages format, run tokens, budgets, fake provider | Harness works with no real key; an exhausted budget gives `BUDGET` |
-| M3 | Sandbox image, one-shot executor | Network, fork-bomb, memory and timeout attacks are all contained |
-| M4 | Gateway, orchestrator, executors, deterministic graders, fan-in, watchdog | `kill -9` an executor mid-run; the submission still completes with no duplicate results |
-| M5 | WebSocket tickets, pub/sub, `seq`, snapshot | A client on gateway B sees work started through gateway A |
-| M6 | Versioned eval rules, gates, judge, calibration and canary checks | An injected output scores low; an uncalibrated rule can't be activated |
-| M7 | Row-level security, per-tenant caps and budgets | Cross-tenant reads return nothing; one tenant's flood doesn't delay another |
-| M8 | Next.js UI and admin rule editor | Playwright: submit, watch live, see rank |
-| M9 | DLQ replay, retries, k6 against the fake provider | 50 × 20-test submissions with p95 under 3 min and nothing lost |
