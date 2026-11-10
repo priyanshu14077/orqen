@@ -11,10 +11,17 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
 
-    database_url: str = "postgresql+psycopg://orqen:orqen@localhost:5433/orqen"
+    # Supabase Postgres through the Supavisor session pooler (IPv4, port 5432).
+    database_url: str
+    # Migrations need a single real Postgres session, so Supabase recommends the
+    # direct connection. Falls back to database_url when unset.
+    migration_database_url: str | None = None
     redis_url: str = "redis://localhost:6380/0"
 
-    jwt_secret: SecretStr = SecretStr("dev-only-change-me")
+    # Supabase Auth owns users and passwords. The secret key (sb_secret_...) is for
+    # server-side admin calls only and must never reach a browser or a sandbox.
+    supabase_url: str | None = None
+    supabase_secret_key: SecretStr | None = None
 
     # Only the proxy reads this. Nothing that runs in the sandbox may ever see it.
     anthropic_api_key: SecretStr | None = None
