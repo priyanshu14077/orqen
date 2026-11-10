@@ -14,15 +14,15 @@ from orqen_core.models import (
     SubmissionKind,
     SubmissionMsg,
     SubmissionStatus,
+    SubscriptionStatus,
     Verdict,
 )
 from orqen_core.models import (
     TestCaseMsg as CaseMsg,  # aliased so pytest doesn't try to collect it
 )
 
-MIGRATION = (
-    Path(__file__).resolve().parents[2] / "migrations/versions/0001_initial_schema.py"
-).read_text()
+MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations/versions"
+MIGRATION = "\n".join(p.read_text() for p in sorted(MIGRATIONS.glob("0*.py")))
 
 
 def submission_msg() -> SubmissionMsg:
@@ -79,6 +79,7 @@ def test_only_system_error_is_retryable() -> None:
         (Verdict, "verdict"),
         (EvalRuleStatus, "status"),
         (LlmPurpose, "purpose"),
+        (SubscriptionStatus, "status"),
     ],
 )
 def test_enum_matches_a_check_constraint_in_the_migration(enum: type[StrEnum], column: str) -> None:
