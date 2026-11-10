@@ -1,55 +1,46 @@
 name: orqen
 
-# M0 runs only the stateful dependencies. Gateway, proxy and workers run on the
-# host with `make gateway` etc. until they get images in M3/M4.
-#
-# Host ports default to 5433/6380 so this can run beside other local Postgres
-# and Redis instances.
-
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: orqen
-      POSTGRES_PASSWORD: orqen
-      POSTGRES_DB: orqen
-    ports:
-      - "${ORQEN_PG_PORT:-5433}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U orqen -d orqen"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
-    networks: [backend]
-
   redis:
     image: redis:7-alpine
-    # AOF so a Redis restart doesn't lose stream entries that haven't been acked.
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+
+    command: [ "redis-server", "--appendonly", "yes", "--appendfsync", "everysec" ]
     ports:
       - "${ORQEN_REDIS_PORT:-6380}:6379"
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 2s
       timeout: 3s
       retries: 30
-    networks: [backend]
+    networks: [ backend ]
+
+  postgres-test:
+    profiles: [ test ]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: orqen
+      POSTGRES_PASSWORD: orqen
+      POSTGRES_DB: orqen_test
+    ports:
+      - "${ORQEN_TEST_PG_PORT:-5433}:5432"
+
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U orqen -d orqen_test" ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
 networks:
   backend:
     name: orqen-backend
-  # Sandboxes join only this network. `internal: true` means no route out; the LLM
-  # proxy will be the only other member (M3). The explicit name is what the
-  # executor passes to the Docker SDK; compose would otherwise prefix it.
+
   sandbox:
     name: orqen-sandbox
     internal: true
 
 volumes:
-  pgdata:
   redisdata:
