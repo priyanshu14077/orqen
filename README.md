@@ -582,27 +582,39 @@ The WebSocket snapshot race is handled in this order: subscribe first, then read
 
 ---
 
-## 10. Quick start
+## 10. Set up and run
 
-You need Docker, [uv](https://docs.astral.sh/uv/) and Python 3.12. uv downloads Python if it's missing.
+You need Docker, [uv](https://docs.astral.sh/uv/), Python 3.12 (uv downloads it if it's missing) and a Supabase project. Docker runs only Redis and the throwaway test database. The application database and user accounts live in Supabase.
+
+### Run locally
+
+1. Copy `.env.example` to `.env` and replace the `<...>` placeholders with your Supabase project's session pooler URL, project URL and secret key (`sb_secret_...`). Leave `ORQEN_MIGRATION_DATABASE_URL` commented out unless your network has IPv6.
+2. Apply the schema and seed the `orqen` tenant, its owner and two contestants:
+
+   ```sh
+   make install
+   make migrate          # alembic upgrade head on Supabase
+   make seed             # safe to rerun
+   ```
+
+3. Start the services:
+
+   ```sh
+   make up           # Redis on localhost:6380
+   make streams      # create the Redis streams and consumer groups
+   make gateway      # http://localhost:8000/readyz checks Supabase and Redis
+   ```
+
+`make help` lists every target.
+
+### Run the tests
 
 ```sh
-cp .env.example .env
-make install
-make setup        # start Postgres + Redis, migrate, seed, create stream groups
-make check        # ruff, mypy, tests: the same checks CI runs
-make gateway      # http://localhost:8000/readyz
+make up test-db   # Redis, plus Postgres on localhost:5433
+make check        # ruff, mypy and pytest: the same checks CI runs
 ```
 
-`make help` lists every target. Postgres listens on host port **5433** and Redis on **6380**, so they don't collide with other local instances. Change `ORQEN_PG_PORT` and `ORQEN_REDIS_PORT` in `.env` if needed.
-
-Seeded logins, all with password `orqen-dev-password`:
-
-| Email | Role |
-|---|---|
-| `owner@orqen.test` | Platform owner |
-| `admin@acme.test`, `admin@globex.test` | Tenant admin |
-| `member@acme.test`, `member@globex.test` | Member |
+The integration tests drop and rebuild their database on every run. `tests/conftest.py` refuses any database whose name doesn't end in `_test` or whose URL contains `supabase`, so a misconfigured `.env` can't wipe Supabase. Before migrating, the tests add the Supabase objects that migration `0002` reacts to: the `anon` and `authenticated` roles and an `auth.users` table.
 
 ---
 
@@ -611,7 +623,7 @@ Seeded logins, all with password `orqen-dev-password`:
 - **Redis keys and stream names** come only from `orqen_core.keys` and `orqen_core.streams`.
 - **Stream payloads** are `StreamMessage` subclasses, stored as `{v, data}`. Bump `schema_version` when a payload changes shape.
 - **Enums and SQL CHECK constraints** are defined in both places. `tests/unit/test_models.py` fails if they drift apart.
-- **Tenant-scoped queries** run inside `orqen_core.db.tenant_tx`, which switches to the non-owner `orqen_app` role and sets `app.tenant_id` for that transaction only.
+- **Every query from a request or a job** runs inside `orqen_core.db.tenant_tx`, which switches to the caller's database role and sets `app.tenant_id` and `app.user_id` for that transaction only.
 - **Logs** are JSON lines. `trace_id` arrives in the `X-Trace-ID` header and travels in every stream payload.
 - **Migrations** are hand-written SQL. Never autogenerate them: autogenerate would silently drop the CHECK constraints, partial indexes and RLS policies.
 
