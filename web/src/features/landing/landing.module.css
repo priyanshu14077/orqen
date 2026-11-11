@@ -1,0 +1,129 @@
+/* Shared by every landing section. Section modules handle their own layout. */
+.page {
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: clip;
+}
+
+.section {
+  position: relative;
+  border-top: 1px solid var(--line);
+  padding: 140px 6vw;
+}
+
+.eyebrow {
+  color: var(--fg-dim);
+}
+
+.h2 {
+  margin: 0;
+  color: var(--fg-bright);
+  font-weight: 700;
+  font-size: clamp(32px, 4vw, 60px);
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.lead {
+  margin: 0;
+  color: var(--fg-dim);
+  max-width: 44ch;
+  text-wrap: pretty;
+}
+
+/* data-reveal: hidden until motion.ts marks it data-in. --d staggers siblings. */
+.rise {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s var(--ease-out) var(--d, 0ms),
+    transform 0.8s var(--ease-out) var(--d, 0ms);
+}
+.rise[data-in] {
+  opacity: 1;
+  transform: none;
+}
+.fade {
+  opacity: 0;
+  transition: opacity 0.9s var(--ease-out) var(--d, 0ms);
+}
+.fade[data-in] {
+  opacity: 1;
+}
+.slide {
+  opacity: 0;
+  transform: translateX(30px);
+  transition:
+    opacity 0.6s var(--ease-out) var(--d, 0ms),
+    transform 0.6s var(--ease-out) var(--d, 0ms);
+}
+.slide[data-in] {
+  opacity: 1;
+  transform: none;
+}
+
+.primary,
+.outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    background var(--dur),
+    color var(--dur),
+    border-color var(--dur),
+    transform 0.25s var(--ease-out);
+}
+.primary {
+  background: var(--fg-bright);
+  color: var(--bg);
+  border: 1px solid var(--fg-bright);
+}
+.primary:hover {
+  background: #ffffff;
+  color: var(--bg);
+}
+.outline {
+  border: 1px solid var(--sep);
+  color: var(--fg-bright);
+  font-weight: 400;
+}
+.outline:hover {
+  border-color: var(--fg);
+  color: var(--fg-bright);
+}
+
+.pending {
+  min-height: 60vh;
+  border-top: 1px solid var(--line);
+}
+
+/* A film grain over the whole page, above backgrounds and below nothing clickable. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background-image: url("/bg/noise.svg");
+  background-size: 240px;
+  opacity: 0.07;
+}
+
+@media (max-width: 760px) {
+  .section {
+    padding: 96px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .fade,
+  .slide {
+    opacity: 1;
+    transform: none;
+  }
+}
