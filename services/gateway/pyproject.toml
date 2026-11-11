@@ -6,6 +6,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "orqen-core",
     "fastapi>=0.115",
+    "httpx>=0.28",
+    "pyjwt[crypto]>=2.10",
     "uvicorn[standard]>=0.32",
 ]
 

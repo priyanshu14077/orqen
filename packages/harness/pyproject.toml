@@ -4,6 +4,7 @@ version = "0.0.0"
 description = "Orqen agent loop and model adapters. Runs inside the sandbox; must stay free of server-side dependencies."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "httpx>=0.28",
     "pydantic>=2.10",
 ]
 
