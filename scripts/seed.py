@@ -32,8 +32,6 @@ SEED_PASSWORD = os.environ.get("ORQEN_SEED_PASSWORD", "orqen-dev-password")
 TENANT = "orqen"
 OWNER = "owner@orqen.test"
 CONTESTANTS = ("alice@orqen.test", "bob@orqen.test")
-# Fixed, so a second run inserts nothing new.
-TRIAL_START = datetime(2026, 11, 10, tzinfo=UTC)
 PROBLEM_SLUG = "invoice-extractor"
 MODEL = "claude-haiku-4-5"
 
@@ -179,7 +177,12 @@ async def seed_tenant(
     platform_owner: bool = False,
 ) -> UUID:
     """A tenant with one admin who authors the starter problem, and contestants on a
-    free trial. Tests call this for a second tenant to check isolation."""
+    free trial. Tests call this for a second tenant to check isolation.
+
+    A trial starts when it is first seeded; later runs keep the existing row, so a
+    contestant whose trial has ended needs a new subscription, not a reseed.
+    """
+    trial_start = datetime.now(UTC)
     tenant_id = sid("tenant", slug)
     await insert(conn, "identity.tenants", {"id": tenant_id, "slug": slug, "name": name})
 
@@ -195,8 +198,8 @@ async def seed_tenant(
                 "user_id": user_id,
                 "plan_id": "free_trial",
                 "status": "trialing",
-                "current_period_start": TRIAL_START,
-                "current_period_end": TRIAL_START + timedelta(days=7),
+                "current_period_start": trial_start,
+                "current_period_end": trial_start + timedelta(days=7),
             },
         )
 

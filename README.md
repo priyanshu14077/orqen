@@ -247,7 +247,7 @@ Rules that follow from this:
 
 ## 7. Data model
 
-Built by migrations `0001` to `0004`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
+Built by migrations `0001` to `0005`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
 
 | Schema | Tables | Holds |
 |---|---|---|
@@ -288,7 +288,8 @@ erDiagram
     }
     USERS {
         uuid id PK, FK "= auth.users.id"
-        text email UK
+        text email UK "private"
+        text handle UK "public, shown on leaderboards"
         bool is_platform_owner
     }
     MEMBERSHIPS {
@@ -434,6 +435,8 @@ The human roles nest through role membership, so a policy written for `orqen_con
 - A contestant can read the verdict and score of every test in their submission, but `output`, `judge_reason` and the other detail columns aren't granted. `judging.sample_test_outputs` returns those columns for sample tests only.
 - A problem in a contest that hasn't started is hidden. While a contest runs, its problems take contest submissions only. After it ends, every contest submission becomes readable, and the problems return to the practice archive.
 - No role can update or delete `ops.llm_usage`.
+- Contestants see the `handle` of every user in their tenant, never the email, and can change only their own handle. A trigger derives a handle from the email when none is given.
+- A trigger enforces each contestant's plan before a submission is stored: a live subscription (SQLSTATE `OQ402`), the trial's submission cap (`OQ402`), `runs_per_hour` sample runs in a rolling hour (`OQ429`), and a contest's `max_submits_per_problem` (`OQ429`). Admins and setters are exempt. A per-user advisory lock stops concurrent submits from both passing a count.
 
 ---
 
