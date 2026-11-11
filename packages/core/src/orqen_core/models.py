@@ -119,8 +119,11 @@ class GradingMsg(StreamMessage):
     attempt: int
     output: Any = None
     exec_verdict: Verdict | None = None  # set when execution already decided (TLE, MLE...)
+    error: str | None = None
     latency_ms: int
     queue_wait_ms: int = 0
+    tokens: int = 0
+    steps: int = 0
 
 
 class DlqMsg(StreamMessage):
