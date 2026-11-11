@@ -557,7 +557,7 @@ classDiagram
 
 ### Gateway API
 
-Every route needs a Supabase access token in `Authorization: Bearer`. The gateway checks it against the project's public keys (see [Supabase hosts Postgres and Auth](#supabase-hosts-postgres-and-auth)), then runs its queries as the caller's database role.
+Every route except `/v1/public/*` needs a Supabase access token in `Authorization: Bearer`. The gateway checks it against the project's public keys (see [Supabase hosts Postgres and Auth](#supabase-hosts-postgres-and-auth)), then runs its queries as the caller's database role.
 
 | Route | Does | Responses |
 |---|---|---|
@@ -569,6 +569,7 @@ Every route needs a Supabase access token in `Authorization: Bearer`. The gatewa
 | `GET /v1/problems/{id}/leaderboard` | Practice leaderboard by handle, best score first | `200` |
 | `GET /v1/submissions` | The caller's recent submissions, newest first | `200` |
 | `GET /v1/submissions/{id}` | Snapshot for the live view: status, score, `seq` and every event so far. After the event list expires, events are rebuilt from `test_results` | `200`, `404` |
+| `GET /v1/public/arena` | No token. Listed problems with solve counts, the top 10 handles by summed best score, and the number of ranked agents. Runs as `orqen_contestant` for a user who doesn't exist, so row-level security limits it to what any contestant sees; emails are never selected. Cached in-process for 30 seconds | `200` |
 | `GET /v1/submissions/{id}/events?after=seq` | `text/event-stream`. Subscribes first, replays stored events above `after` (or `Last-Event-ID`), then follows live ones; ends after `completed` or 10 minutes | `200`, `404` |
 
 Every event passes `orqen_gateway.live.public_event`, an allow-list per event type (`meta`, `status`, `test`, `completed`). It is the redaction contract: outputs, expected values and traces never reach a browser, whatever a worker publishes. Test events carry the test number, `sample` or `hidden`, attempt, verdict, score, tokens, steps, latency and a judge-authored detail. A `SYSTEM_ERROR` retry is its own event, so the log shows one row per attempt.
@@ -768,9 +769,10 @@ A redelivery after a crash runs the count again and completes the submission. Th
 
 | Route | Screen | Data |
 |---|---|---|
+| `/` | Public landing page: a replaying judge log, the five stages, the seven verdicts, live problems and leaderboard, pricing and FAQ | `GET /v1/public/arena`, streamed in |
 | `/login` | GitHub sign-in; email sign-in, sign-up and password reset | Supabase Auth |
 | `/reset-password` | Set a new password after the reset email | Supabase Auth |
-| `/` | Problem set: limits, your best, solved count | `GET /v1/problems` |
+| `/problems` | Problem set: limits, your best, solved count | `GET /v1/problems` |
 | `/p/:id/submit` | Statement, limits grid, samples, practice leaderboard; prompt editor with Run samples and Submit | `GET /v1/problems/{id}`, `POST /v1/submissions` |
 | `/s/:id` | Live judging: pipeline breadcrumb, one log row per event, redacted hidden traces, final summary, vim-style status bar | Snapshot + SSE |
 | `/submissions` | Your submissions; sample runs are drawn dashed so they never read as ranked submits | `GET /v1/submissions` |
@@ -805,6 +807,24 @@ flowchart LR
 ### Motion
 
 Rows slide in as events land, verdicts settle into place, the pipeline breadcrumb and status bar change colour as stages advance, the final score counts up, scoreboard rows animate to their new rank (FLIP), new accepts flash, sections fade in as they scroll into view, and the statement pane shows a reading-progress line. Every duration is a token and collapses to zero under `prefers-reduced-motion`.
+
+### Landing page
+
+`src/features/landing/` builds `/` from one section component per block, each with its own CSS module. Sections are server components; their effects come from data attributes that `motion.ts` wires up in one client wrapper:
+
+| Attribute | Effect |
+|---|---|
+| `data-pin` | Sets `--p` from 0 to 1 while the section scrolls past its sticky stage. The hero fades its copy into a single log line, and the problems track slides sideways |
+| `data-stages` | Marks the current stage in the "five stages" section, so scrolling steps through them |
+| `data-reveal` | Adds `data-in` the first time the element enters the viewport; CSS fades or lifts it, staggered by `--d` |
+| `data-spot` | Tracks the pointer in `--mx` and `--my` for spotlight gradients |
+| `data-magnet`, `data-scramble` | Buttons lean towards the pointer; nav links scramble their text on hover |
+| `data-type` | Types a command once it is visible |
+| `data-skew`, `data-view` | Scroll velocity skews the problems track; the footer wordmark rises as it enters |
+
+The hero's log is `replay.ts`: a seeded generator of judge lines, so the server and the browser render the same first rows. It pauses when off screen or in a background tab. Under `prefers-reduced-motion`, only scroll-driven pins remain and everything else shows its final state. Pointer effects are off on touch screens.
+
+Background textures live in `web/public/bg/` (`grid`, `dots`, `contours`, `scanlines`, `noise`). They were generated for Orqen, so they carry no licence terms. To use another texture, add a file there and pass its path to `<Backdrop src="/bg/<file>" />`; `size`, `opacity`, `fade` and `parallax` tune it.
 
 ### Run it
 
