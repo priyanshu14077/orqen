@@ -11,7 +11,7 @@ import styles from "./layout.module.css";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const me = await getMe();
   const tabs: Tab[] = [
-    { key: "problems", label: "problems", href: "/", match: "^/(p/.*)?$" },
+    { key: "problems", label: "problems", href: "/problems", match: "^/(problems|p/)" },
     { key: "judge", label: "judge", href: "/submissions", match: "^/(s/|submissions)" },
     { key: "contest", label: "contest", href: "/c/round-1/standings", match: "^/c/" },
   ];

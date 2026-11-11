@@ -30,9 +30,9 @@ describe("the /api/gw allow-list", () => {
 describe("safeNext", () => {
   it.each([
     ["/s/abc", "/s/abc"],
-    ["//evil.example", "/"],
-    ["https://evil.example", "/"],
-    ["/\\evil.example", "/"],
-    [null, "/"],
+    ["//evil.example", "/problems"],
+    ["https://evil.example", "/problems"],
+    ["/\\evil.example", "/problems"],
+    [null, "/problems"],
   ])("%s → %s", (input, out) => expect(safeNext(input)).toBe(out));
 });

@@ -7,7 +7,7 @@ import { relative, score100 } from "@/lib/format";
 import { serverNow } from "@/lib/server/clock";
 import { gateway } from "@/lib/server/gateway";
 
-import base from "../page.module.css";
+import base from "../problems/page.module.css";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = { title: "submissions" };
@@ -54,7 +54,7 @@ export default async function SubmissionsPage() {
         ))}
         {rows.length === 0 && (
           <div className={styles.empty}>
-            Nothing yet. <Link href="/">Pick a problem</Link> and run its samples.
+            Nothing yet. <Link href="/problems">Pick a problem</Link> and run its samples.
           </div>
         )}
       </div>
