@@ -247,7 +247,7 @@ Rules that follow from this:
 
 ## 7. Data model
 
-Built by migrations `0001` to `0004`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
+Built by migrations `0001` to `0005`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
 
 | Schema | Tables | Holds |
 |---|---|---|
@@ -288,7 +288,8 @@ erDiagram
     }
     USERS {
         uuid id PK, FK "= auth.users.id"
-        text email UK
+        text email UK "private"
+        text handle UK "public, shown on leaderboards"
         bool is_platform_owner
     }
     MEMBERSHIPS {
