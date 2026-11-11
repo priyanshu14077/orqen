@@ -1,0 +1,53 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  color: var(--fg-dim);
+}
+.value {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.kappa {
+  color: var(--fg-bright);
+  font-size: var(--text-hero);
+  font-weight: 300;
+  line-height: 1;
+}
+.req {
+  color: var(--fg-dim);
+}
+.track {
+  position: relative;
+  height: 8px;
+  background: var(--track);
+}
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  transition:
+    width var(--dur-slow) var(--ease-out),
+    background var(--dur-slow);
+}
+.mark {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 1px;
+  background: var(--fg-bright);
+}
+.scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--fg-faint);
+  font-size: var(--text-sm);
+}
+.stale {
+  color: var(--verdict-limit);
+  animation: fade var(--dur) var(--ease-out);
+}

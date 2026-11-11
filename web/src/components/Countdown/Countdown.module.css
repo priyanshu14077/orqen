@@ -1,0 +1,23 @@
+.wrap {
+  text-align: right;
+}
+.label {
+  color: var(--fg-dim);
+}
+.clock {
+  color: var(--fg-bright);
+  font-size: var(--text-display);
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+.digit {
+  display: inline-block;
+  animation: tick var(--dur) var(--ease-out);
+}
+@keyframes tick {
+  from {
+    opacity: 0.35;
+    transform: translateY(-2px);
+  }
+}
