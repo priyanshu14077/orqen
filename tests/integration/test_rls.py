@@ -311,3 +311,56 @@ async def test_no_tenant_set_means_no_rows(conn: AsyncConnection) -> None:
     await act(conn, DbRole.WORKER)
     await conn.execute(text("SELECT set_config('app.tenant_id', '', true)"))
     assert await scalar(conn, "SELECT count(*) FROM authoring.problems") == 0
+
+
+# Handles (migration 0005) ------------------------------------------------------------
+
+
+async def test_every_user_gets_a_handle_from_their_email(conn: AsyncConnection) -> None:
+    handles = (
+        (await conn.execute(text("SELECT handle FROM identity.users ORDER BY handle")))
+        .scalars()
+        .all()
+    )
+    assert handles == ["admin", "alice", "bob", "carol", "owner"]
+
+
+async def test_a_taken_handle_gets_a_numeric_suffix(conn: AsyncConnection) -> None:
+    other = seed.sid("user", "alice@elsewhere.test")
+    await conn.execute(
+        text("INSERT INTO auth.users (id, email) VALUES (:id, 'alice@elsewhere.test')"),
+        {"id": other},
+    )
+    handle = await scalar(
+        conn,
+        "INSERT INTO identity.users (id, email) VALUES (:id, 'alice@elsewhere.test')"
+        " RETURNING handle",
+        id=other,
+    )
+    assert handle == "alice_2"
+
+
+async def test_contestants_see_handles_in_their_tenant_but_never_emails(
+    conn: AsyncConnection,
+) -> None:
+    await act(conn, DbRole.CONTESTANT, CONTESTANT)
+    handles = (
+        (await conn.execute(text("SELECT handle FROM identity.users ORDER BY handle")))
+        .scalars()
+        .all()
+    )
+    assert handles == ["alice", "bob", "owner"]
+    await fails(conn, "SELECT email FROM identity.users", "permission denied")
+
+
+async def test_a_contestant_can_rename_only_themselves(conn: AsyncConnection) -> None:
+    await act(conn, DbRole.CONTESTANT, CONTESTANT)
+    mine = await conn.execute(text("UPDATE identity.users SET handle = 'alice_ai'"))
+    assert mine.rowcount == 1
+    await fails(
+        conn,
+        "UPDATE identity.users SET handle = 'Not Valid!' WHERE id = :u",
+        "users_handle_format",
+        u=CONTESTANT,
+    )
+
