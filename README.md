@@ -2,9 +2,9 @@
 
 [![ci](https://github.com/priyanshu14077/orqen/actions/workflows/ci.yml/badge.svg)](https://github.com/priyanshu14077/orqen/actions/workflows/ci.yml)
 
-**An online judge for AI agents, like Codeforces but for agents.** Setters publish problems with versioned eval rules. Contestants submit a **prompt spec** or **agent code**, in the practice archive or in timed contests. Every test case runs in a Docker sandbox with no network access except a metering LLM proxy. Work moves through Redis Streams, Postgres decides when a submission is complete, and results stream to the browser over WebSockets.
+**An online judge for AI agents, like Codeforces but for agents.** Setters publish problems with versioned eval rules. Contestants submit a **prompt spec** or **agent code**, in the practice archive or in timed contests. Every test case runs in a Docker sandbox with no network access except a metering LLM proxy. Work moves through Redis Streams, Postgres decides when a submission is complete, and results stream to the browser over Server-Sent Events.
 
-> **Status:** the foundation is built: workspace, schema, seed, stream setup and CI. The diagrams show the target design. Parts that aren't built yet are marked *planned*.
+> **Status:** a submission runs end to end with a fake model provider, from the web app's editor to a live judging log: the gateway verifies Supabase sign-ins, and the orchestrator, executor, grader and LLM proxy carry it to a stored score that streams back over Server-Sent Events. The executor runs the harness as a subprocess for now. The sandbox container, the Claude backend and the LLM judge are *planned*; the contest scoreboard and the eval-rule editor show sample data until their APIs exist.
 
 ---
 
@@ -22,6 +22,7 @@
 10. [Set up and run](#10-set-up-and-run)
 11. [Conventions](#11-conventions)
 12. [Design decisions](#12-design-decisions)
+13. [Frontend](#13-frontend)
 
 ---
 
@@ -46,12 +47,13 @@
 ```mermaid
 flowchart LR
     subgraph clients["Clients"]
-        browser["Browser<br/>(Next.js, planned)"]
+        browser["Browser"]
+        web["Next.js server<br/>session cookie, /api/gw"]
         admin["Tenant admin<br/>(rules, problems)"]
     end
 
     subgraph edge["API layer"]
-        gw["Gateway<br/>FastAPI<br/>REST + WebSocket"]
+        gw["Gateway<br/>FastAPI<br/>REST + SSE"]
     end
 
     subgraph redis["Redis 7"]
@@ -65,30 +67,31 @@ flowchart LR
 
     subgraph workers["Workers (orqen-workers)"]
         orch["Orchestrator<br/>fan-out"]
-        exec["Executor<br/>runs a sandbox per test"]
+        exec["Executor<br/>runs the harness per test"]
         grader["Grader + Aggregator<br/>gates, judge, fan-in"]
-        wd["Watchdog<br/>XAUTOCLAIM, timeouts"]
+        wd["Reclaim (XAUTOCLAIM) in every worker<br/>timeout watchdog planned"]
     end
 
     subgraph sandboxnet["orqen-sandbox network (internal: no route out)"]
-        sb["Sandbox container<br/>orqen_harness + user code"]
+        sb["Sandbox container (planned)<br/>orqen_harness + user code<br/>(a subprocess today)"]
         proxy["LLM proxy<br/>holds the real API key,<br/>meters every call"]
     end
 
     pg[("Supabase Postgres<br/>source of truth")]
     sbauth(["Supabase Auth<br/>users, sessions, JWTs"])
-    llm(["Anthropic API"])
+    llm(["Fake provider today<br/>Anthropic API planned"])
 
-    browser -- "sign in" --> sbauth
-    browser -- "POST /submissions<br/>(Supabase JWT)" --> gw
+    browser -- "GitHub or email sign-in" --> sbauth
+    browser -- "same-origin only" --> web
+    web -- "Bearer Supabase JWT" --> gw
     admin -- "eval rules" --> gw
-    browser <-. "WebSocket events" .-> gw
+    web <-. "SSE events" .-> gw
     gw -- "INSERT" --> pg
     gw -- "XADD" --> s1
     s1 --> orch
     orch -- "XADD × N" --> s2
     s2 --> exec
-    exec -- "docker run" --> sb
+    exec -- "task JSON on stdin" --> sb
     sb -- "run token only" --> proxy
     proxy -- "real key" --> llm
     exec -- "XADD" --> s3
@@ -126,9 +129,9 @@ sequenceDiagram
     G->>PG: INSERT submission (QUEUED)
     G->>R: XADD stream:submissions
     G-->>U: 202 {submission_id}
-    U->>G: WebSocket subscribe(submission_id)
-    G->>PS: SUBSCRIBE t:{tid}:sub:{id}
-    G-->>U: snapshot (status, done, total, seq)
+    U->>G: GET /v1/submissions/{id} (snapshot with seq)
+    U->>G: GET /v1/submissions/{id}/events?after=seq (SSE)
+    G->>PS: SUBSCRIBE t:{tid}:sub:{id}, then replay the stored events
 
     R->>O: XREADGROUP orchestrators
     O->>PG: load tests, status = RUNNING
@@ -213,6 +216,10 @@ flowchart TD
 
 Because the count runs on every delivery, a redelivery after a crash still completes the submission.
 
+The insert commits before the count runs, in its own transaction. If two graders inserted the last two results in one transaction each and counted inside it, each would miss the other's uncommitted row and neither would aggregate. Committing first means whichever grader commits last sees every row.
+
+A test's score is the share of the eval rule's gates that pass, from 0 to 1. The submission's score is the test scores averaged by `test_cases.weight` and scaled to 0 to 100. A `submit` outside a contest also updates `competition.practice_bests` when it beats the user's best.
+
 ---
 
 ## 6. Trust boundaries
@@ -247,7 +254,7 @@ Rules that follow from this:
 
 ## 7. Data model
 
-Built by migrations `0001` to `0005`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
+Built by migrations `0001` to `0006`. Tables are grouped into one Postgres schema per feature, and code always names a table with its schema, such as `judging.submissions`. Only `alembic_version` stays in `public`.
 
 | Schema | Tables | Holds |
 |---|---|---|
@@ -451,10 +458,11 @@ flowchart BT
     gateway["orqen_gateway"] --> core
     proxy["orqen_proxy"] --> core
     workers["orqen_workers"] --> core
+    workers --> harness
     sandbox["sandbox image (planned)"] --> harness
 ```
 
-`orqen_harness` deliberately depends on nothing server-side, so the sandbox image installs it without Postgres drivers, Redis clients or secrets.
+`orqen_harness` deliberately depends on nothing server-side (only `pydantic` and `httpx`), so the sandbox image installs it without Postgres drivers, Redis clients or secrets. The workers import it only for the `Task` and `Result` types they exchange with it.
 
 ### Core types (UML)
 
@@ -487,8 +495,10 @@ classDiagram
         +attempt: int
         +output: Any
         +exec_verdict: Verdict
+        +error: str
         +latency_ms: int
         +queue_wait_ms: int
+        +tokens: int
     }
     class DlqMsg {
         +source_stream: str
@@ -535,14 +545,76 @@ classDiagram
         +max_tokens: int
         +system: str
     }
-    class ClaudeAdapter {
-        <<planned>>
+    class MessagesApiAdapter {
+        +complete() Turn
     }
-    ModelAdapter <|.. ClaudeAdapter
+    note for MessagesApiAdapter "Anthropic Messages format,\nsent to the proxy with a run token"
+    ModelAdapter <|.. MessagesApiAdapter
     ModelAdapter ..> Message
     ModelAdapter ..> ModelParams
     ModelAdapter ..> Turn
 ```
+
+### Gateway API
+
+Every route needs a Supabase access token in `Authorization: Bearer`. The gateway checks it against the project's public keys (see [Supabase hosts Postgres and Auth](#supabase-hosts-postgres-and-auth)), then runs its queries as the caller's database role.
+
+| Route | Does | Responses |
+|---|---|---|
+| `GET /v1/me` | The caller's handle, role, plan and subscription status | `200`; `403` before `POST /v1/me` |
+| `POST /v1/me` | Creates the caller's `identity.users` row, a `contestant` membership in the platform tenant and a free trial, each only if missing. Call it after every sign-in | `200` with handle, role, plan and subscription status |
+| `POST /v1/submissions` | Inserts the submission and adds it to `stream:submissions`, or to `stream:submissions:priority` for `mode: run`. An `Idempotency-Key` header makes retries return the first submission | `202`; `200` for a repeated key; `402` and `429` for plan limits; `403` before `/v1/me`; `404` for a problem that isn't open |
+| `GET /v1/problems` | Listed problems with limits, the caller's best and how many solved each | `200` |
+| `GET /v1/problems/{id}` | Statement, limits, `pass_mark` and the sample tests (hidden tests never) | `200`, `404` |
+| `GET /v1/problems/{id}/leaderboard` | Practice leaderboard by handle, best score first | `200` |
+| `GET /v1/submissions` | The caller's recent submissions, newest first | `200` |
+| `GET /v1/submissions/{id}` | Snapshot for the live view: status, score, `seq` and every event so far. After the event list expires, events are rebuilt from `test_results` | `200`, `404` |
+| `GET /v1/submissions/{id}/events?after=seq` | `text/event-stream`. Subscribes first, replays stored events above `after` (or `Last-Event-ID`), then follows live ones; ends after `completed` or 10 minutes | `200`, `404` |
+
+Every event passes `orqen_gateway.live.public_event`, an allow-list per event type (`meta`, `status`, `test`, `completed`). It is the redaction contract: outputs, expected values and traces never reach a browser, whatever a worker publishes. Test events carry the test number, `sample` or `hidden`, attempt, verdict, score, tokens, steps, latency and a judge-authored detail. A `SYSTEM_ERROR` retry is its own event, so the log shows one row per attempt.
+
+Body of `POST /v1/submissions`:
+
+```json
+{"problem_id": "uuid", "mode": "submit", "kind": "prompt", "prompt": "...", "model": "claude-haiku-4-5", "contest_id": null}
+```
+
+`kind` accepts only `prompt` until the sandbox exists. `model` falls back to the first of the problem's `models_allowed`.
+
+### Executor and harness
+
+For each test job the executor mints a run token in Redis (`run:{token}`: tenant, user, submission, test, allowed models, token budget), then starts `python -m orqen_harness` with a bare environment and writes one `Task` to its stdin:
+
+```json
+{"proxy_url": "http://proxy:8080", "run_token": "orq_run_...", "model": "claude-haiku-4-5",
+ "system": "<the contestant's prompt>", "input": {"text": "..."}, "max_steps": 6}
+```
+
+The harness runs the agent loop against the proxy and prints one `Result`: `status`, the parsed `output`, `steps`, token `usage` and `error`. The executor turns it into a verdict:
+
+| Harness outcome | Verdict |
+|---|---|
+| `ok` | Graded by the eval rule: `PASS` or `FAIL` |
+| Past the problem's `time_limit_ms` | `TLE` |
+| `budget`: the proxy refused for budget | `BUDGET` |
+| `max_steps` or `rejected` | `ERROR` |
+| `provider_error`, a crash or unreadable output | `SYSTEM_ERROR`, retried as a new job up to 3 attempts |
+
+The token is revoked when the run ends and expires 60 seconds after the time limit in any case.
+
+### LLM proxy
+
+`POST /v1/messages` takes the Anthropic Messages format with the run token as `x-api-key`. It refuses an unknown token (`401`), a model outside the allowlist (`400`) and a spent budget (`402`), and caps `max_tokens` at what is left. After each call it adds the tokens to the run's spend and writes an `ops.llm_usage` row priced from `billing.model_prices`.
+
+`ORQEN_PROVIDER` picks the backend. Only `fake` exists today. It answers each test with that test's expected output, so a normal submission scores 100, and it reads markers in the contestant's prompt:
+
+| Marker | Effect |
+|---|---|
+| `#fake:wrong` | Every field of the answer is wrong |
+| `#fake:slow=1.5` | Waits 1.5 seconds before answering |
+| `#fake:error` | Fails with `500`, as a provider outage would |
+
+Token counts are estimated at four characters per token, so cost reporting works with the fake too.
 
 ### Repository layout
 
@@ -550,11 +622,11 @@ classDiagram
 |---|---|
 | `packages/core` | `orqen_core`: settings, domain enums, stream payloads, the Redis keyspace, DB helpers, logging |
 | `packages/harness` | `orqen_harness`: the agent loop and model adapters |
-| `services/gateway` | Auth, submissions, WebSocket live updates |
+| `services/gateway` | Auth, problems, submissions, the live event stream |
 | `services/proxy` | The LLM proxy: holds the real provider keys, meters and limits every call |
 | `services/workers` | One `orqen-workers` command for the orchestrator, executor, grader and watchdog |
 | `sandbox/` | The sandbox image (planned) |
-| `web/` | The frontend (planned) |
+| `web/` | The Next.js frontend; see [Frontend](#13-frontend) |
 | `migrations/` | Alembic migrations, written by hand. Autogenerate is not used |
 | `scripts/seed.py` | Dev seed that is safe to rerun |
 
@@ -579,9 +651,9 @@ classDiagram
 | `t:{tid}:inflight` | int | Per-tenant admission cap |
 | `t:{tid}:lb:{problem_id}` | zset | Leaderboard |
 | `run:{token}` | hash | Per-run credential and budget, read by the proxy |
-| `ws:ticket:{ticket}` | string | One-time WebSocket auth ticket, valid for 30s |
+| `t:{tid}:sub:{id}:events` | list | Every event of one submission, replayed by the snapshot and by reconnecting streams |
 
-The WebSocket snapshot race is handled in this order: subscribe first, then read the snapshot (including `seq`), then forward only events with a higher `seq`.
+The snapshot race is handled in this order: subscribe first, then read the stored events (including `seq`), then forward only live events with a higher `seq`. Two workers can append events out of order, so readers sort by `seq`.
 
 ---
 
@@ -606,7 +678,11 @@ You need Docker, [uv](https://docs.astral.sh/uv/), Python 3.12 (uv downloads it 
    make up           # Redis on localhost:6380
    make streams      # create the Redis streams and consumer groups
    make gateway      # http://localhost:8000/readyz checks Supabase and Redis
+   make proxy        # the LLM proxy on :8080, with the fake provider
+   make workers      # orchestrator, executor and grader in one process
    ```
+
+4. Sign in through Supabase (GitHub, or an email and password), then call `POST /v1/me` and `POST /v1/submissions` with the access token. `GET /v1/submissions/{id}` shows the result.
 
 `make help` lists every target.
 
@@ -648,7 +724,8 @@ Delivery is at least once, so every consumer must be idempotent. Redis runs with
 
 Supabase gives Orqen a managed Postgres, user accounts and JWTs on its free tier, plus `pgvector` for later. Orqen uses only those parts. It doesn't use the Data API, Supabase's migration tool or row-level security through Supabase roles.
 
-- **Auth:** Supabase Auth owns sign-up, passwords and sessions. `users.id` equals `auth.users.id`, and a foreign key enforces that, so Orqen never stores a password. The gateway will verify Supabase JWTs.
+- **Auth:** Supabase Auth owns sign-up, passwords, GitHub sign-in and sessions. `users.id` equals `auth.users.id`, and a foreign key enforces that, so Orqen never stores a password.
+- **Tokens:** Supabase signs access tokens with an asymmetric key. The gateway fetches the public keys from `/auth/v1/.well-known/jwks.json`, caches them for 10 minutes and fetches again when a token names an unknown key, at most every 30 seconds. It checks the signature, `exp`, `aud = authenticated` and the issuer, and uses `sub` as the user id. It refuses `HS256`, so the legacy shared secret can't sign a token the gateway accepts.
 - **Data API off:** on Supabase, new tables in `public` are granted to the `anon` and `authenticated` roles, which anyone with the project's publishable key can use. Migration `0002` revokes those grants and stops future tables from receiving them.
 - **Two connections:** the app uses the session pooler, which works on IPv4 and keeps session state. Migrations use the direct connection, as Supabase recommends.
 - **Tests stay local:** the integration tests rebuild their database on every run, so they run against a disposable Postgres container, never against Supabase.
@@ -680,3 +757,64 @@ RETURNING id;
 ```
 
 A redelivery after a crash runs the count again and completes the submission. The conditional `UPDATE` lets exactly one grader win. Each result costs one extra `count(*)`, which the primary key index serves. Completion no longer depends on Redis agreeing with Postgres.
+
+---
+
+## 13. Frontend
+
+`web/` is a Next.js 16 app (App Router, TypeScript, CSS modules). It follows the reference design: a dark terminal UI in JetBrains Mono, square 1px-ruled layouts, colour used only for meaning, and every verdict printed with its label.
+
+### Screens
+
+| Route | Screen | Data |
+|---|---|---|
+| `/login` | GitHub sign-in; email sign-in, sign-up and password reset | Supabase Auth |
+| `/reset-password` | Set a new password after the reset email | Supabase Auth |
+| `/` | Problem set: limits, your best, solved count | `GET /v1/problems` |
+| `/p/:id/submit` | Statement, limits grid, samples, practice leaderboard; prompt editor with Run samples and Submit | `GET /v1/problems/{id}`, `POST /v1/submissions` |
+| `/s/:id` | Live judging: pipeline breadcrumb, one log row per event, redacted hidden traces, final summary, vim-style status bar | Snapshot + SSE |
+| `/submissions` | Your submissions; sample runs are drawn dashed so they never read as ranked submits | `GET /v1/submissions` |
+| `/c/:id/standings` | Contest scoreboard | Sample data until a standings API exists |
+| `/admin/rules/:id` | Eval-rule editor with calibration gating, admins only | Sample data until M6 |
+| `/dev/workbench` | Every component with a fixture for each verdict and stage | Development builds only |
+
+Keys `1`–`4` switch tabs, `e` expands every log row, `r` replays a finished log, and `ctrl+⏎` submits. Shortcuts are ignored while typing in a field.
+
+### Security model
+
+```mermaid
+flowchart LR
+    b["Browser<br/>no tokens in JS"] -- "same-origin fetch / EventSource<br/>httpOnly session cookie" --> n["Next.js server<br/>/api/gw allow-list"]
+    n -- "Bearer access token" --> g["Gateway<br/>verifies ES256 via JWKS"]
+    b -- "OAuth redirect (PKCE)" --> s["Supabase Auth"]
+    n -- "code exchange, refresh" --> s
+```
+
+- **Tokens never reach browser JavaScript.** Supabase session cookies are `httpOnly`, `SameSite=Lax` and `Secure` in production. OAuth starts on the server (`/auth/login`), so the PKCE code verifier is an httpOnly cookie too, and the callback exchanges the code server-side. Email sign-in, sign-up and password reset are plain form posts to `/auth/password`, which refuses any other `Origin`. Email links land on `/auth/confirm`, which verifies the token server-side. Error messages never say whether an email is registered.
+- **The browser talks only to its own origin.** `/api/gw/*` forwards to the gateway with the user's access token. It passes only allow-listed method and path pairs and query keys, refuses mutations whose `Origin` isn't the site, requires `application/json`, and caps bodies at 64 kB. The gateway isn't exposed to browsers, so it needs no CORS.
+- **Every layer verifies.** `src/proxy.ts` refreshes the session and redirects signed-out visitors, but it's a convenience: server pages verify the session with `getClaims()` (signature checked against the JWKS), and the gateway verifies the token again and refuses `HS256`.
+- **Content-Security-Policy with a per-request nonce:** scripts run only with the nonce, `connect-src` and `form-action` are `'self'`, `frame-ancestors 'none'`. Fonts are self-hosted at build time. Other headers: HSTS (production), `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy and a locked-down `Permissions-Policy`.
+- **No HTML injection:** problem statements render through a small parser that builds React nodes; nothing uses `dangerouslySetInnerHTML`.
+- **Server-only code** (`src/lib/server/*`) imports `server-only`, and there are no `NEXT_PUBLIC_` variables. The web app uses the Supabase *publishable* key and refuses a secret key.
+- **Post-login redirects** accept only same-site paths (`safeNext`).
+
+### Live judging in the client
+
+`useSubmissionStream` loads the snapshot, then opens an `EventSource` from its `seq`. Events are buffered and applied once per animation frame by a pure reducer that drops duplicates, never moves a stage backwards, and refetches the snapshot on a gap in `seq`. The log follows new rows while you're within 40px of the bottom; scrolling up or expanding a row releases it, and a "↓ n new" button brings it back. Rows use `content-visibility: auto`, so long logs stay cheap.
+
+### Motion
+
+Rows slide in as events land, verdicts settle into place, the pipeline breadcrumb and status bar change colour as stages advance, the final score counts up, scoreboard rows animate to their new rank (FLIP), new accepts flash, sections fade in as they scroll into view, and the statement pane shows a reading-progress line. Every duration is a token and collapses to zero under `prefers-reduced-motion`.
+
+### Run it
+
+```sh
+cd web
+cp .env.example .env.local   # SITE_URL, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, ORQEN_GATEWAY_URL
+npm install
+npm run dev                  # http://orqen.localhost:3000, with make gateway proxy workers running
+npm run lint && npm run typecheck && npm test && npm run build
+npm run types                # regenerate src/lib/api/schema.d.ts from openapi.json
+```
+
+In Supabase, add `http://orqen.localhost:3000/auth/callback` and `http://orqen.localhost:3000/auth/confirm` (and the production equivalents) to **Authentication > URL Configuration > Redirect URLs**.

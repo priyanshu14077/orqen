@@ -161,8 +161,25 @@ async def insert(conn: AsyncConnection, table: str, row: dict[str, Any]) -> None
     )
 
 
+# USD per million tokens, from Anthropic's price list. The proxy prices each call
+# from the latest row for its model.
+MODEL_PRICES = [(MODEL, datetime(2025, 10, 15, tzinfo=UTC), 1.00, 5.00)]
+
+
 async def seed(conn: AsyncConnection, auth: AuthProvider) -> None:
-    """The platform: the `orqen` tenant, its owner, two contestants and one problem."""
+    """The platform: model prices, the `orqen` tenant, its owner, two contestants and
+    one problem."""
+    for model, effective_from, input_price, output_price in MODEL_PRICES:
+        await insert(
+            conn,
+            "billing.model_prices",
+            {
+                "model": model,
+                "effective_from": effective_from,
+                "input_usd_per_mtok": input_price,
+                "output_usd_per_mtok": output_price,
+            },
+        )
     await seed_tenant(conn, auth, TENANT, "Orqen", OWNER, CONTESTANTS, platform_owner=True)
 
 

@@ -1,0 +1,44 @@
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chip {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  color: var(--sep);
+  transition:
+    color var(--dur-slow) var(--ease-out),
+    border-color var(--dur-slow) var(--ease-out),
+    background var(--dur-slow) var(--ease-out);
+}
+.done {
+  color: var(--fg-dim);
+}
+.current {
+  color: var(--fg-bright);
+  border-color: var(--fg-dim);
+  font-weight: 700;
+  animation: fade var(--dur-slow) var(--ease-out);
+}
+.complete {
+  color: var(--bg);
+  background: var(--fg-bright);
+  border-color: var(--fg-bright);
+}
+.failed {
+  color: var(--verdict-fail);
+  border-color: var(--verdict-fail);
+}
+.sep {
+  color: var(--sep);
+}

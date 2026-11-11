@@ -1,0 +1,29 @@
+.notice {
+  border: 1px solid var(--line-strong);
+  padding: 8px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  animation: enter var(--dur) var(--ease-out);
+}
+.tag {
+  font-weight: 700;
+}
+.error {
+  border-color: color-mix(in srgb, var(--verdict-fail) 55%, var(--line));
+}
+.error .tag {
+  color: var(--verdict-fail);
+}
+.warn .tag {
+  color: var(--verdict-limit);
+}
+.info .tag {
+  color: var(--fg-dim);
+}
+.preview {
+  border-style: dashed;
+}
+.preview .tag {
+  color: var(--accent);
+}

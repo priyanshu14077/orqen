@@ -30,6 +30,12 @@ def sub_seq(tenant_id: UUID, submission_id: UUID) -> str:
     return f"{_t(tenant_id)}:sub:{submission_id}:seq"
 
 
+def sub_events(tenant_id: UUID, submission_id: UUID) -> str:
+    """List: every event published for one submission, in seq order. The snapshot and
+    a reconnecting stream replay it, so a dropped pub/sub message is recovered."""
+    return f"{_t(tenant_id)}:sub:{submission_id}:events"
+
+
 def sub_channel(tenant_id: UUID, submission_id: UUID) -> str:
     """Pub/sub channel carrying live events for one submission."""
     return f"{_t(tenant_id)}:sub:{submission_id}"

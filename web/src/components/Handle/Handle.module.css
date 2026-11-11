@@ -1,0 +1,14 @@
+.handle {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rating {
+  color: var(--fg-faint);
+  font-weight: 400;
+  margin-left: 6px;
+}
+.you {
+  color: var(--fg-dim);
+  font-weight: 400;
+  margin-left: 6px;
+}

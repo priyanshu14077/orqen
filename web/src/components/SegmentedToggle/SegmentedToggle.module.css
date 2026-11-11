@@ -1,0 +1,34 @@
+.group {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+}
+.option {
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  padding: 4px 10px;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+.option:hover:not([aria-checked="true"]):not(:disabled) {
+  color: var(--fg-bright);
+}
+.option[aria-checked="true"] {
+  background: var(--fg-bright);
+  color: var(--bg);
+}
+.soft .option[aria-checked="true"] {
+  background: var(--line-strong);
+  color: var(--fg-bright);
+}
+.option:disabled {
+  color: var(--fg-faint);
+  cursor: not-allowed;
+}
+.lg .option {
+  padding: 6px 14px;
+  font-size: var(--text-md);
+}

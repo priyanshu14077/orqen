@@ -1,8 +1,8 @@
 """The provider-neutral seam between the agent loop and a model.
 
-The loop only ever talks to a `ModelAdapter`. Claude is the first implementation
-(M1); adding another provider means adding an adapter, not touching the loop, the
-judge or the proxy's callers.
+The loop only ever talks to a `ModelAdapter`. In the sandbox the adapter is
+`MessagesApiAdapter`, which speaks the Anthropic Messages format to the Orqen proxy;
+the proxy decides which provider answers. Tests use in-memory adapters.
 """
 
 from typing import Any, Literal, Protocol
@@ -54,3 +54,15 @@ class ModelAdapter(Protocol):
     async def complete(
         self, messages: list[Message], tools: list[ToolSpec], params: ModelParams
     ) -> Turn: ...
+
+
+class BudgetExceeded(Exception):
+    """The proxy refused the call because the run's token budget is spent."""
+
+
+class ProviderError(Exception):
+    """The model provider or the proxy failed. Infrastructure, so the run is retried."""
+
+
+class RequestRejected(Exception):
+    """The proxy rejected the request itself, such as a model outside the allowlist."""

@@ -1,0 +1,28 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.label {
+  color: var(--fg-dim);
+}
+.hint {
+  color: var(--fg-faint);
+}
+.control {
+  background: var(--input-bg);
+  border: 1px solid var(--input-line);
+  color: var(--fg);
+  padding: 7px 10px;
+  font-size: var(--text-md);
+  outline: none;
+  border-radius: 0;
+  transition: border-color var(--dur-fast);
+}
+.control:focus {
+  border-color: var(--fg-dim);
+}
+textarea.control {
+  line-height: 1.65;
+  resize: vertical;
+}

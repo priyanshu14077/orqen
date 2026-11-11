@@ -1,0 +1,40 @@
+.editor {
+  display: flex;
+  min-height: 100%;
+}
+.gutter {
+  flex-shrink: 0;
+  padding: 10px 10px 10px 12px;
+  text-align: right;
+  color: var(--sep);
+  border-right: 1px solid var(--line-faint);
+  user-select: none;
+  font-size: 12.5px;
+}
+.ln {
+  height: var(--row-h);
+  line-height: var(--row-h);
+  transition: color var(--dur-fast);
+}
+.ln[data-current="true"] {
+  color: var(--fg-dim);
+}
+.text {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--fg);
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 12.5px;
+  line-height: var(--row-h);
+  white-space: pre;
+  overflow: hidden;
+  tab-size: 4;
+  caret-color: var(--fg-bright);
+}
+.text:disabled {
+  color: var(--fg-dim);
+}

@@ -1,0 +1,7 @@
+.tag {
+  border: 1px solid var(--sep);
+  color: var(--verdict-system);
+  padding: 0 5px;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}

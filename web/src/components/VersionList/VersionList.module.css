@@ -1,0 +1,42 @@
+.list {
+  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: enter var(--dur) var(--ease-out) both;
+}
+.line {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.v {
+  color: var(--fg-bright);
+  width: 24px;
+}
+.status {
+  width: 96px;
+}
+.k {
+  color: var(--fg);
+  width: 56px;
+}
+.fill {
+  flex: 1;
+}
+.sha {
+  color: var(--fg-faint);
+}
+.note {
+  display: flex;
+  gap: 12px;
+  color: var(--fg-dim);
+}

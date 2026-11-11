@@ -1,0 +1,9 @@
+.h {
+  color: var(--fg-bright);
+  margin: 0 0 4px;
+  font-size: inherit;
+  font-weight: 400;
+}
+.hash {
+  color: var(--fg-faint);
+}

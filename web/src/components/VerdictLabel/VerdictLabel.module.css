@@ -1,0 +1,17 @@
+.verdict {
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color var(--dur) var(--ease-out);
+}
+.running {
+  color: var(--fg-bright);
+}
+.landed {
+  animation: land var(--dur-slow) var(--ease-out);
+}
+@keyframes land {
+  from {
+    opacity: 0.2;
+    letter-spacing: 0.12em;
+  }
+}

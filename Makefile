@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down nuke test-db migrate migrate-status seed streams setup gateway proxy test test-unit lint fmt typecheck check
+.PHONY: help install up down nuke test-db migrate migrate-status seed streams setup gateway proxy workers web web-types test test-unit lint fmt typecheck check
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-10s %s\n", $$1, $$2}'
@@ -38,6 +38,16 @@ gateway: ## Run the gateway on :8000 with reload
 
 proxy: ## Run the LLM proxy on :8080 with reload
 	uv run uvicorn orqen_proxy.app:app --reload --port 8080
+
+workers: ## Run the orchestrator, executor and grader in one process
+	uv run orqen-workers all
+
+web: ## Run the Next.js frontend on :3000
+	cd web && npm run dev
+
+web-types: ## Regenerate the frontend's API types from the gateway's OpenAPI schema
+	uv run python -c "import json; from orqen_gateway.app import create_app; print(json.dumps(create_app().openapi()))" > web/src/lib/api/openapi.json
+	cd web && npm run types
 
 test: ## All tests; integration tests need `make up test-db`
 	uv run pytest

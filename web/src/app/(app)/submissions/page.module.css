@@ -1,0 +1,72 @@
+.cols {
+  display: grid;
+  grid-template-columns: 110px minmax(180px, 1.4fr) 70px 150px 80px 90px;
+  gap: 0 12px;
+  padding: 6px var(--gutter-wide);
+  align-items: baseline;
+}
+.head {
+  composes: cols;
+  color: var(--fg-faint);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line);
+}
+.row {
+  composes: cols;
+  padding: 7px var(--gutter-wide);
+  border-bottom: 1px solid var(--line-faint);
+  border-left: 2px solid transparent;
+  color: var(--fg);
+  text-decoration: none;
+  transition:
+    background var(--dur-fast),
+    border-color var(--dur) var(--ease-out);
+}
+.row:hover {
+  background: var(--hover);
+  border-left-color: var(--fg-bright);
+  color: var(--fg);
+}
+.dim {
+  color: var(--fg-dim);
+}
+.run {
+  color: var(--fg-dim);
+  border: 1px dashed var(--sep);
+  padding: 0 6px;
+}
+.submit {
+  color: var(--fg-bright);
+  border: 1px solid var(--fg-dim);
+  padding: 0 6px;
+}
+.right {
+  text-align: right;
+}
+.score {
+  text-align: right;
+  color: var(--fg-bright);
+}
+.status[data-status="COMPLETED"] {
+  color: var(--fg);
+}
+.status[data-status="FAILED"],
+.status[data-status="TIMED_OUT"] {
+  color: var(--verdict-fail);
+}
+.empty {
+  padding: 18px var(--gutter-wide);
+  color: var(--fg-mute);
+}
+@media (max-width: 760px) {
+  .cols,
+  .head,
+  .row {
+    grid-template-columns: 70px minmax(0, 1fr) 60px 70px;
+  }
+  .wide {
+    display: none;
+  }
+}

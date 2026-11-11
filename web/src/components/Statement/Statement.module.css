@@ -1,0 +1,19 @@
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.65;
+  color: var(--fg-prose);
+  max-width: 78ch;
+}
+.prose p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.code {
+  color: var(--fg-bright);
+}
+.strong {
+  color: var(--fg-bright);
+  font-weight: 500;
+}

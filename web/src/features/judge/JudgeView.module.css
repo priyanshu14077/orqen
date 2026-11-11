@@ -1,0 +1,87 @@
+.view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: fade var(--dur) var(--ease-out);
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  padding: 10px var(--gutter);
+  border-bottom: 1px solid var(--line);
+  color: var(--fg-dim);
+}
+.title {
+  color: var(--fg-bright);
+  margin: 0;
+  font-size: inherit;
+  font-weight: 400;
+}
+.v {
+  color: var(--fg);
+}
+.fill {
+  flex: 1;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+}
+.pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px var(--gutter);
+  border-bottom: 1px solid var(--line);
+}
+.logWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 0 24px;
+  overscroll-behavior: contain;
+}
+.summary {
+  margin: 10px var(--gutter) 0 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  color: var(--fg-dim);
+  animation: enter var(--dur-slow) var(--ease-out);
+}
+.final {
+  color: var(--fg-bright);
+  font-weight: 700;
+}
+.empty {
+  padding: 12px var(--gutter) 0 44px;
+  color: var(--fg-mute);
+}
+.jump {
+  position: absolute;
+  right: var(--gutter);
+  bottom: 12px;
+  border: 1px solid var(--fg-dim);
+  background: var(--panel);
+  color: var(--fg-bright);
+  padding: 3px 10px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  animation: enter var(--dur) var(--ease-out);
+}
+.jump:hover {
+  border-color: var(--fg-bright);
+}
