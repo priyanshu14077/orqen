@@ -1,0 +1,35 @@
+.backdrop {
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  background-repeat: repeat;
+  transform: translateY(calc(var(--p, 0) * var(--travel, 0px)));
+}
+.radial {
+  mask-image: radial-gradient(70% 60% at 50% 45%, #000 20%, transparent 100%);
+}
+.top {
+  mask-image: linear-gradient(to bottom, #000, transparent 85%);
+}
+.bottom {
+  mask-image: linear-gradient(to top, #000, transparent 85%);
+}
+.edges {
+  mask-image: linear-gradient(to right, transparent, #000 15%, #000 85%, transparent);
+}
+.none {
+  mask-image: none;
+}
+.drift {
+  animation: drift 60s linear infinite;
+}
+@keyframes drift {
+  to {
+    background-position: 480px 480px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drift {
+    animation: none;
+  }
+}

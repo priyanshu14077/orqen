@@ -1,0 +1,73 @@
+.bar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 40;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 28px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-bright);
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+}
+.block {
+  width: 8px;
+  height: 15px;
+  background: var(--fg-bright);
+  animation: blink 1s steps(1) infinite;
+}
+.links {
+  display: flex;
+  gap: 22px;
+}
+.links a,
+.signin {
+  color: var(--fg-dim);
+  text-decoration: none;
+}
+.links a:hover,
+.signin:hover {
+  color: var(--fg-bright);
+}
+.fill {
+  flex: 1;
+}
+.cta {
+  border: 1px solid var(--fg-bright);
+  color: var(--fg-bright);
+  padding: 6px 12px;
+  text-decoration: none;
+  transition:
+    background var(--dur),
+    color var(--dur),
+    transform 0.25s var(--ease-out);
+}
+.cta:hover {
+  background: var(--fg-bright);
+  color: var(--bg);
+}
+@media (max-width: 900px) {
+  .links {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .bar {
+    padding: 0 16px;
+    gap: 14px;
+  }
+  .signin {
+    display: none;
+  }
+}
