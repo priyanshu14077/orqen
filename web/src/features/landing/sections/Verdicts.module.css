@@ -1,0 +1,74 @@
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  margin-bottom: 48px;
+}
+.title {
+  max-width: 14ch;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+.card {
+  --c: var(--fg);
+  background:
+    radial-gradient(240px circle at var(--mx, -400px) var(--my, -400px), color-mix(in srgb, var(--c) 12%, transparent), transparent 70%),
+    var(--bg);
+  padding: 22px 20px 26px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 150px;
+}
+.card[data-v="PASS"] {
+  --c: var(--verdict-pass);
+}
+.card[data-v="FAIL"] {
+  --c: var(--verdict-fail);
+}
+.card[data-v="TLE"],
+.card[data-v="MLE"] {
+  --c: var(--verdict-limit);
+}
+.card[data-v="ERROR"] {
+  --c: var(--verdict-error);
+}
+.card[data-v="BUDGET"] {
+  --c: var(--verdict-budget);
+}
+.card[data-v="SYSTEM_ERROR"] {
+  --c: var(--verdict-system);
+}
+.name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--c);
+  font-weight: 700;
+  font-size: 16px;
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  background: var(--c);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.desc {
+  color: var(--fg-prose);
+  font-size: 13px;
+}
+.fill {
+  flex: 1;
+}
+.scores {
+  color: var(--fg-mute);
+  font-size: 12px;
+}

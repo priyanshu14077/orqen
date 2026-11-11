@@ -1,0 +1,233 @@
+.pipeline {
+  position: relative;
+  height: 520vh;
+  border-top: 1px solid var(--line);
+}
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 6vw;
+  padding: 110px 6vw 60px;
+  overflow: hidden;
+}
+.left {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.crumbs {
+  position: relative;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail,
+.railFill {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 1px;
+}
+.rail {
+  bottom: 6px;
+  background: var(--line);
+}
+.railFill {
+  height: calc(var(--p, 0) * (100% - 12px));
+  background: var(--fg-bright);
+  box-shadow: 0 0 8px var(--fg-bright);
+}
+.crumb {
+  font-size: clamp(16px, 1.6vw, 22px);
+  padding: 6px 0;
+  color: var(--sep);
+  transition:
+    color 0.3s,
+    transform 0.3s var(--ease-out);
+}
+.crumb[data-on] {
+  color: var(--fg-bright);
+}
+.right {
+  position: relative;
+}
+.step {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(4px);
+  transition:
+    opacity 0.45s var(--ease-out),
+    transform 0.55s var(--ease-out),
+    filter 0.45s;
+  pointer-events: none;
+}
+.step[data-on] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  pointer-events: auto;
+}
+.say {
+  margin: 0;
+  color: var(--fg-bright);
+  font-size: clamp(18px, 1.7vw, 24px);
+  line-height: 1.45;
+  max-width: 34ch;
+}
+.pre {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  padding: 16px 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--fg-prose);
+  white-space: pre-wrap;
+}
+.limits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.limit {
+  background: var(--bg);
+  padding: 12px 14px;
+}
+.k {
+  color: var(--fg-mute);
+  font-size: 11px;
+}
+.v {
+  color: var(--fg-bright);
+}
+.box {
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.call {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.redacted {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+.bar {
+  height: 9px;
+  background: repeating-linear-gradient(-45deg, var(--track-2) 0 6px, var(--track) 6px 12px);
+}
+.rule {
+  height: 1px;
+  background: var(--line);
+  margin: 8px 0;
+}
+.retry {
+  display: grid;
+  grid-template-columns: 40px 130px minmax(0, 1fr);
+  gap: 12px;
+}
+.tag {
+  border: 1px solid var(--sep);
+  color: var(--verdict-system);
+  padding: 0 5px;
+  font-size: 11px;
+}
+.result {
+  border: 1px solid var(--line-strong);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.score {
+  color: var(--fg-bright);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.verdicts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+.dim {
+  color: var(--fg-dim);
+}
+.faint {
+  color: var(--fg-faint);
+}
+.pass {
+  color: var(--verdict-pass);
+}
+.fail {
+  color: var(--verdict-fail);
+}
+.limit,
+.limitC {
+  color: var(--verdict-limit);
+}
+.err {
+  color: var(--verdict-error);
+}
+.budget {
+  color: var(--verdict-budget);
+}
+.sys {
+  color: var(--verdict-system);
+}
+
+/* Phones: no pin. The stages stack and each one reads on its own. */
+@media (max-width: 760px) {
+  .pipeline {
+    height: auto;
+  }
+  .stage {
+    position: relative;
+    height: auto;
+    grid-template-columns: 1fr;
+    padding: 96px 20px;
+  }
+  .crumbs,
+  .railFill {
+    display: none;
+  }
+  .right {
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+  }
+  .step {
+    position: static;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step {
+    filter: none;
+    transform: none;
+  }
+}
