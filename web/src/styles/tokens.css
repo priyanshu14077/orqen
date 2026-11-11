@@ -1,0 +1,76 @@
+/*
+ * Orqen theme tokens. Screens and components reference these, never raw hex values.
+ * Source: docs/frontend "Orqen Frontend Integration", Table 5, plus the values the
+ * reference build uses without naming them.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg: #0b0c0d;
+  --panel: #15181a;
+  --panel-2: #1d2124; /* status bar segments */
+  --surface-raised: #111315; /* admin page */
+  --hover: #121518; /* row hover, your own row */
+  --track: #1b1f22; /* meter track, redaction bars */
+  --track-2: #22272b; /* redaction stripes, scrollbar thumb */
+  --input-bg: #0d0f10;
+
+  /* Lines */
+  --line: #1f2326;
+  --line-faint: #15181a;
+  --line-strong: #2a2f33;
+  --input-line: #262b2f;
+  --sep: #3a4045; /* breadcrumbs, inactive borders */
+
+  /* Text. --fg-mute was #5f666c in the prototype (3.4:1); raised to pass 4.5:1. */
+  --fg-bright: #eef0f2;
+  --fg: #c8ccd0;
+  --fg-prose: #b5bac0;
+  --fg-dim: #7d848a;
+  --fg-mute: #80878d;
+  --fg-faint: #4a5056; /* gutters and rules only, never body text */
+  --selection: #2f3a44;
+
+  /* Verdicts: one token each, and every use also prints its label. */
+  --verdict-pass: #3fb950;
+  --verdict-fail: #f85149;
+  --verdict-limit: #e3b341; /* TLE, MLE */
+  --verdict-error: #f0883e;
+  --verdict-budget: #e05fd0;
+  --verdict-system: #8b949e;
+  --accent: #5b8cff; /* you, links in the board */
+
+  /* Type */
+  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-md: 13px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-display: 30px;
+  --text-hero: 40px;
+
+  /* Space and size */
+  --gutter: 14px;
+  --gutter-wide: 20px;
+  --bar-h: 36px;
+  --status-h: 22px;
+  --row-h: 20px;
+
+  /* Motion. Everything collapses to 0 under prefers-reduced-motion. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 320ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}
