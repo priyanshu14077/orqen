@@ -364,3 +364,70 @@ async def test_a_contestant_can_rename_only_themselves(conn: AsyncConnection) ->
         u=CONTESTANT,
     )
 
+
+# Plan limits (migration 0005) --------------------------------------------------------
+
+
+async def fails_with(c: AsyncConnection, sqlstate: str, sql: str, /, **params: Any) -> None:
+    sp = await c.begin_nested()
+    with pytest.raises(DBAPIError) as raised:
+        await c.execute(text(sql), params)
+    await sp.rollback()
+    assert getattr(raised.value.orig, "sqlstate", None) == sqlstate
+
+
+SUBMIT = (
+    "INSERT INTO judging.submissions (tenant_id, user_id, problem_id, contest_id, kind,"
+    " mode, payload) VALUES (:t, :u, :p, :c, 'prompt', :mode, '{}')"
+)
+
+
+async def test_the_trial_allows_ten_sample_runs_an_hour(conn: AsyncConnection) -> None:
+    await act(conn, DbRole.CONTESTANT, CONTESTANT)
+    for _ in range(10):
+        await submit(conn, CONTESTANT, mode="run")
+    await fails_with(conn, "OQ429", SUBMIT, t=ORQEN, u=CONTESTANT, p=PROBLEM, c=None, mode="run")
+
+
+async def test_the_trial_allows_one_submission(conn: AsyncConnection) -> None:
+    await act(conn, DbRole.CONTESTANT, CONTESTANT)
+    await submit(conn, CONTESTANT)
+    await fails_with(conn, "OQ402", SUBMIT, t=ORQEN, u=CONTESTANT, p=PROBLEM, c=None, mode="submit")
+
+
+async def test_without_a_live_subscription_nothing_runs(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text("UPDATE billing.subscriptions SET status = 'expired' WHERE user_id = :u"),
+        {"u": CONTESTANT},
+    )
+    await act(conn, DbRole.CONTESTANT, CONTESTANT)
+    await fails_with(conn, "OQ402", SUBMIT, t=ORQEN, u=CONTESTANT, p=PROBLEM, c=None, mode="run")
+
+
+async def test_admins_and_setters_have_no_plan_limits(conn: AsyncConnection) -> None:
+    await act(conn, DbRole.ADMIN, AUTHOR)
+    for _ in range(12):
+        await submit(conn, AUTHOR, mode="run")
+    await submit(conn, AUTHOR)
+    await submit(conn, AUTHOR)
+
+
+async def test_pro_allows_sixty_runs_and_a_contest_caps_submits(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            "UPDATE billing.subscriptions SET plan_id = 'pro', status = 'active' WHERE user_id = :u"
+        ),
+        {"u": CONTESTANT},
+    )
+    running = await contest(conn, "-1 hour", "1 hour")
+    await conn.execute(
+        text("UPDATE competition.contests SET max_submits_per_problem = 2 WHERE id = :c"),
+        {"c": running},
+    )
+    await act(conn, DbRole.CONTESTANT, CONTESTANT)
+    for _ in range(2):
+        await submit(conn, CONTESTANT, contest=running)
+    await fails_with(
+        conn, "OQ429", SUBMIT, t=ORQEN, u=CONTESTANT, p=PROBLEM, c=running, mode="submit"
+    )
+    assert await scalar(conn, "SELECT runs_per_hour FROM billing.plans WHERE id = 'pro'") == 60
