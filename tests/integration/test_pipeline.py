@@ -494,3 +494,19 @@ async def test_another_users_submission_is_invisible(
     assert (await client.get(f"/v1/submissions/{sid}", headers=stranger.headers)).status_code == 404
     events = await client.get(f"/v1/submissions/{sid}/events", headers=stranger.headers)
     assert events.status_code == 404
+
+
+async def test_the_public_arena_shows_handles_and_never_emails(
+    stack: Stack, seeded: AsyncEngine, client: httpx.AsyncClient
+) -> None:
+    user = await sign_up(stack, seeded, client)
+    await finished(client, user, (await submit(client, user)).json()["submission_id"])
+
+    resp = await client.get("/v1/public/arena")  # no Authorization header
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["cache-control"] == "public, max-age=30"
+    body = resp.json()
+    assert [p["slug"] for p in body["problems"]] == [seed.PROBLEM_SLUG]
+    assert body["ranked_agents"] >= 1
+    assert body["leaders"] and body["leaders"][0]["rank"] == 1
+    assert "@" not in resp.text
