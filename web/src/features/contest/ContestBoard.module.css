@@ -1,0 +1,36 @@
+.view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  animation: fade var(--dur) var(--ease-out);
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 32px;
+  padding: 18px var(--gutter-wide) 14px;
+  border-bottom: 1px solid var(--line);
+}
+.dim {
+  color: var(--fg-dim);
+}
+.title {
+  color: var(--fg-bright);
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+}
+.fill {
+  flex: 1;
+}
+.table {
+  min-width: 980px;
+}
+.foot {
+  padding: 10px var(--gutter-wide);
+  color: var(--fg-mute);
+}
+.preview {
+  padding: 10px var(--gutter-wide) 0;
+}
