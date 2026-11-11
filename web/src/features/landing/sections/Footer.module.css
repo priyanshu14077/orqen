@@ -1,0 +1,38 @@
+.footer {
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  padding: 28px 6vw 0;
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  color: var(--fg-mute);
+  font-size: 12px;
+}
+.links a {
+  color: var(--fg-mute);
+  text-decoration: none;
+}
+.links a:hover {
+  color: var(--fg-bright);
+}
+.fill {
+  flex: 1;
+}
+.word {
+  font-size: 27vw;
+  font-weight: 700;
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--line-strong);
+  background: radial-gradient(260px circle at var(--mx, -400px) var(--my, -400px), var(--fg-bright), transparent 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  margin-top: 40px;
+  transform: translateY(calc((1 - var(--v, 0)) * 18%));
+  white-space: nowrap;
+  user-select: none;
+}

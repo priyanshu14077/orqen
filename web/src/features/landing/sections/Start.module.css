@@ -1,0 +1,66 @@
+.start {
+  padding-top: 160px;
+  padding-bottom: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  overflow: hidden;
+}
+.term {
+  position: relative;
+  border: 1px solid var(--line-strong);
+  background: var(--input-bg);
+  max-width: 860px;
+  width: 100%;
+  box-shadow: 0 40px 120px -60px rgb(238 240 242 / 0.18);
+}
+.bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+.fill {
+  flex: 1;
+}
+.body {
+  padding: 22px 20px;
+  font-size: clamp(14px, 1.6vw, 20px);
+  line-height: 1.7;
+  min-height: 150px;
+  overflow-wrap: anywhere;
+}
+.prompt {
+  color: var(--fg-mute);
+}
+.cmd {
+  color: var(--fg-bright);
+}
+.caret {
+  color: var(--fg-bright);
+  animation: blink 1s steps(1) infinite;
+}
+.after {
+  color: var(--fg-dim);
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.5s,
+    transform 0.5s var(--ease-out);
+}
+.after[data-in] {
+  opacity: 1;
+  transform: none;
+}
+.actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.note {
+  color: var(--fg-mute);
+}
