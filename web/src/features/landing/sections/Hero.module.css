@@ -1,0 +1,258 @@
+.hero {
+  position: relative;
+  height: 260vh;
+}
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* The replay log, dimmed: it is texture until the reader looks for it. */
+.log {
+  position: absolute;
+  inset: -20px;
+  padding: 92px 48px 0;
+  font-size: 12px;
+  line-height: 21px;
+  color: var(--fg-faint);
+  opacity: calc(1 - var(--p, 0) * 0.6);
+  transform: translateY(calc(var(--p, 0) * -80px));
+}
+.row {
+  display: grid;
+  grid-template-columns:
+    minmax(110px, 1.3fr) minmax(44px, 0.5fr) minmax(70px, 0.8fr) minmax(120px, 1.3fr)
+    minmax(90px, 1fr) minmax(50px, 0.5fr) minmax(70px, 0.8fr);
+  gap: 14px;
+  white-space: nowrap;
+  animation: fade 0.5s var(--ease-out);
+}
+.summary {
+  display: block;
+  color: var(--fg-mute);
+}
+.num {
+  text-align: right;
+}
+.verdict[data-v="PASS"] {
+  color: color-mix(in srgb, var(--verdict-pass) 55%, var(--bg));
+}
+.verdict[data-v="FAIL"] {
+  color: color-mix(in srgb, var(--verdict-fail) 55%, var(--bg));
+}
+.verdict[data-v="TLE"],
+.verdict[data-v="MLE"] {
+  color: color-mix(in srgb, var(--verdict-limit) 50%, var(--bg));
+}
+.verdict[data-v="ERROR"] {
+  color: color-mix(in srgb, var(--verdict-error) 50%, var(--bg));
+}
+.verdict[data-v="BUDGET"] {
+  color: color-mix(in srgb, var(--verdict-budget) 50%, var(--bg));
+}
+.verdict[data-v="SYSTEM_ERROR"] {
+  color: var(--fg-faint);
+}
+
+/* A torch that follows the pointer through the log, and a shade behind the copy. */
+.spotlight {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    360px circle at var(--mx, 74%) var(--my, 42%),
+    transparent 0%,
+    color-mix(in srgb, var(--bg) 78%, transparent) 100%
+  );
+}
+.shade {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 55% at 26% 56%, color-mix(in srgb, var(--bg) 96%, transparent) 35%, transparent 100%);
+}
+
+.copy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 52px 6vw 0;
+  opacity: calc(1 - var(--p, 0) * 2.4);
+  transform: translateY(calc(var(--p, 0) * -180px));
+}
+.kicker {
+  color: var(--fg-dim);
+  margin-bottom: 22px;
+}
+.h1 {
+  margin: 0;
+  color: var(--fg-bright);
+  font-weight: 700;
+  font-size: clamp(40px, 6.4vw, 116px);
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+}
+.mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.06em;
+}
+.mask > span {
+  display: block;
+  transform: translateY(110%);
+  transition: transform 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s;
+}
+.mask + .mask > span {
+  transition-delay: 0.24s;
+}
+.h1[data-in] .mask > span {
+  transform: none;
+}
+.sub {
+  margin: 28px 0 0;
+  max-width: 58ch;
+  color: var(--fg-prose);
+  font-size: 15px;
+  text-wrap: pretty;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+  align-items: center;
+}
+.stat {
+  color: var(--fg-mute);
+  margin-left: 8px;
+}
+.statNum {
+  color: var(--fg);
+}
+
+/* Second beat of the pin: the hero copy leaves, one log line takes the stage. */
+.oneLine {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 0 6vw;
+  opacity: clamp(0, calc((var(--p, 0) - 0.42) * 4), 1);
+  transform: scale(calc(0.92 + var(--p, 0) * 0.08));
+  pointer-events: none;
+}
+.line {
+  border: 1px solid var(--line-strong);
+  background: var(--input-bg);
+  padding: 18px 26px;
+  display: grid;
+  grid-template-columns: repeat(6, auto);
+  gap: 10px 28px;
+  font-size: clamp(14px, 1.6vw, 22px);
+  color: var(--fg);
+  align-items: baseline;
+  box-shadow: 0 0 80px color-mix(in srgb, var(--verdict-pass) 8%, transparent);
+}
+.dim {
+  color: var(--fg-dim);
+}
+.pass {
+  color: var(--verdict-pass);
+  font-weight: 700;
+}
+.caption {
+  color: var(--fg-dim);
+  max-width: 52ch;
+  text-align: center;
+}
+
+.chip {
+  position: absolute;
+  z-index: 2;
+  right: 28px;
+  bottom: 24px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  opacity: calc(1 - var(--p, 0) * 3);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--verdict-pass);
+  box-shadow: 0 0 10px var(--verdict-pass);
+  animation: blink 1.6s steps(1) infinite;
+}
+.chipDim {
+  color: var(--fg-mute);
+}
+.chipBright {
+  color: var(--fg-bright);
+}
+.hint {
+  position: absolute;
+  left: 28px;
+  bottom: 24px;
+  color: var(--fg-faint);
+  opacity: calc(1 - var(--p, 0) * 5);
+}
+
+@media (max-width: 760px) {
+  .hero {
+    height: 200vh;
+  }
+  .log {
+    padding: 80px 16px 0;
+    font-size: 11px;
+  }
+  .row {
+    grid-template-columns: 96px 36px 64px 100px minmax(0, 1fr);
+  }
+  .row > :nth-child(n + 6) {
+    display: none;
+  }
+  .copy {
+    padding: 52px 20px 0;
+  }
+  .shade {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--bg) 55%, transparent),
+      color-mix(in srgb, var(--bg) 92%, transparent) 30%,
+      color-mix(in srgb, var(--bg) 92%, transparent) 85%,
+      color-mix(in srgb, var(--bg) 60%, transparent)
+    );
+  }
+  .line {
+    grid-template-columns: repeat(3, auto);
+    padding: 14px 16px;
+  }
+  .chip {
+    left: 16px;
+    right: 16px;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+  .hint {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mask > span {
+    transform: none;
+  }
+  .dot {
+    animation: none;
+  }
+}

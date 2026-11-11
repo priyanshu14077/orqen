@@ -11,7 +11,7 @@ from sqlalchemy import text
 from orqen_core.db import make_engine
 from orqen_core.logging import TRACE_HEADER, configure_logging, get_logger, new_trace_id
 from orqen_core.settings import get_settings
-from orqen_gateway import api, live, reads
+from orqen_gateway import api, live, public, reads
 from orqen_gateway.auth import supabase_verifier
 
 log = get_logger(__name__)
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Orqen gateway", lifespan=lifespan)
-    for module in (api, reads, live):
+    for module in (api, reads, live, public):
         app.include_router(module.router)
 
     @app.middleware("http")

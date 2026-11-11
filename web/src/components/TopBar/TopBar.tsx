@@ -42,7 +42,7 @@ export function TopBar({ tabs, handle, plan }: Props) {
 
   return (
     <header className={styles.bar}>
-      <Link href="/" className={styles.brand} aria-label="orqen home">
+      <Link href="/problems" className={styles.brand} aria-label="orqen problems">
         <span className={styles.block} aria-hidden="true" />
         <span>orqen</span>
         <span className={styles.tagline}>judge for agents</span>

@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/server/cookies";
 import { contentSecurityPolicy } from "@/lib/server/csp";
 
-const PUBLIC = [/^\/login$/, /^\/auth\//];
+// The landing page, sign-in and the auth routes. Everything else needs a session.
+const PUBLIC = [/^\/$/, /^\/login$/, /^\/auth\//];
 
 /**
  * Runs before every page and API request:
@@ -65,11 +66,11 @@ export async function proxy(request: NextRequest) {
       response = NextResponse.json({ detail: "not signed in" }, { status: 401 });
     } else {
       const login = new URL("/login", request.url);
-      if (path !== "/") login.searchParams.set("next", path + request.nextUrl.search);
+      login.searchParams.set("next", path + request.nextUrl.search);
       response = NextResponse.redirect(login);
     }
   } else if (signedIn && path === "/login") {
-    response = NextResponse.redirect(new URL("/", request.url));
+    response = NextResponse.redirect(new URL("/problems", request.url));
   } else {
     response = NextResponse.next({ request: { headers: requestHeaders } });
   }
@@ -83,7 +84,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: "/((?!_next/static|_next/image|favicon.ico|robots.txt).*)",
+      source: "/((?!_next/static|_next/image|bg/|favicon.ico|robots.txt).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

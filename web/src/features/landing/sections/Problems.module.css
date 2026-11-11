@@ -1,0 +1,140 @@
+.pinned {
+  position: relative;
+  border-top: 1px solid var(--line);
+}
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 40px;
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  margin-bottom: 40px;
+}
+.stage .head {
+  padding: 0 6vw;
+  margin: 0;
+}
+.track {
+  display: flex;
+  gap: 16px;
+  padding: 0 6vw;
+  width: max-content;
+  transform: translateX(calc(var(--p, 0) * (100vw - 100%))) skewX(calc(var(--vel, 0) * -5deg));
+  will-change: transform;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.card {
+  width: min(380px, 80vw);
+  min-height: 360px;
+  border: 1px solid var(--line-strong);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--fg);
+  text-decoration: none;
+  background:
+    radial-gradient(320px circle at var(--mx, -400px) var(--my, -400px), rgb(238 240 242 / 0.08), transparent 70%),
+    var(--input-bg);
+  transition:
+    border-color 0.25s,
+    translate 0.35s var(--ease-out);
+}
+.card:hover {
+  border-color: var(--fg-mute);
+  color: var(--fg);
+  translate: 0 -4px;
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  color: var(--fg-dim);
+}
+.title {
+  margin: 6px 0 0;
+  color: var(--fg-bright);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.slug {
+  color: var(--fg-mute);
+  font-size: 12px;
+}
+.fill {
+  flex: 1;
+}
+.limits {
+  display: flex;
+  gap: 14px;
+  color: var(--fg-mute);
+  font-size: 12px;
+}
+.stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  font-size: 12px;
+  gap: 4px;
+}
+.dim {
+  color: var(--fg-dim);
+}
+.progress {
+  margin: 0 6vw;
+  height: 1px;
+  background: var(--line);
+  position: relative;
+}
+.progress span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--p, 0) * 100%);
+  background: var(--fg-bright);
+}
+
+@media (max-width: 760px) {
+  .pinned {
+    height: auto !important;
+    padding: 96px 0;
+  }
+  .stage {
+    position: static;
+    height: auto;
+  }
+  .track {
+    transform: none;
+    width: auto;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding: 0 20px 8px;
+  }
+  .card {
+    scroll-snap-align: start;
+    flex: none;
+  }
+  .progress {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .track {
+    transform: translateX(calc(var(--p, 0) * (100vw - 100%)));
+  }
+}
