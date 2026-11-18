@@ -16,6 +16,25 @@ services:
       retries: 30
     networks: [ backend ]
 
+  # The development database. Production stays on Supabase; Supabase Auth still signs
+  # users in locally, and their ids land here through POST /v1/me and the seed.
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: orqen
+      POSTGRES_PASSWORD: orqen
+      POSTGRES_DB: orqen
+    ports:
+      - "${ORQEN_DEV_PG_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U orqen -d orqen" ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [ backend ]
+
   postgres-test:
     profiles: [ test ]
     image: postgres:17-alpine
@@ -44,3 +63,4 @@ networks:
 
 volumes:
   redisdata:
+  pgdata:

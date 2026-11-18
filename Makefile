@@ -7,22 +7,22 @@ help: ## List targets
 install: ## Install the workspace and dev tools
 	uv sync
 
-up: ## Start Redis, wait until healthy
+up: ## Start Redis and the local Postgres, wait until healthy
 	docker compose up -d --wait
 
-down: ## Stop all containers, keep Redis data
+down: ## Stop all containers, keep Redis and Postgres data
 	docker compose --profile test down
 
-nuke: ## Stop all containers and delete Redis data
+nuke: ## Stop all containers and delete Redis and Postgres data
 	docker compose --profile test down -v
 
 test-db: ## Start the throwaway Postgres that integration tests rebuild
 	docker compose --profile test up -d --wait postgres-test
 
-migrate: ## Apply migrations to Supabase
+migrate: ## Apply migrations to ORQEN_DATABASE_URL (local Postgres in dev)
 	uv run alembic upgrade head
 
-migrate-status: ## Show the Supabase schema revision
+migrate-status: ## Show the schema revision of ORQEN_DATABASE_URL
 	uv run alembic current
 
 seed: ## Load dev tenants, users and the starter problem (idempotent)
