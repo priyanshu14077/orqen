@@ -2,8 +2,8 @@
 
 principal       the verified Supabase user from `Authorization: Bearer`
 platform_tenant the tenant every user joins
-member          principal + tenant + membership role; `member.tx(engine)` opens a
-                transaction as that role, so row-level security applies
+member          principal + tenant; `member.tx(engine)` opens a transaction as the
+                user's membership role, so row-level security applies
 """
 
 from collections.abc import AsyncGenerator
@@ -17,8 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from orqen_core.db import DbRole, tenant_tx
-from orqen_core.models import Role
+from orqen_core.db import NotAMember, member_tx
 from orqen_gateway.auth import AuthError, JwtVerifier, Principal
 
 # SQLSTATEs raised by the database, and what the caller sees.
@@ -68,16 +67,7 @@ Caller = Annotated[Principal, Depends(principal)]
 Tenant = Annotated[UUID, Depends(platform_tenant)]
 
 
-async def member_role(engine: AsyncEngine, tenant_id: UUID, user_id: UUID) -> Role:
-    async with tenant_tx(engine, tenant_id, DbRole.WORKER) as c:
-        found = await c.execute(
-            text("SELECT role FROM identity.memberships WHERE tenant_id = :t AND user_id = :u"),
-            {"t": tenant_id, "u": user_id},
-        )
-        role = found.scalar_one_or_none()
-    if role is None:
-        raise HTTPException(403, "no Orqen account yet: call POST /v1/me first")
-    return Role(role)
+NO_ACCOUNT = "no Orqen account yet: call POST /v1/me first"
 
 
 def refusal(exc: DBAPIError) -> HTTPException | None:
@@ -93,21 +83,25 @@ def refusal(exc: DBAPIError) -> HTTPException | None:
 
 @dataclass(frozen=True)
 class Member:
+    """A signed-in user in a tenant. The membership and its role are checked when a
+    transaction opens, in the same round trip that scopes it, so a request costs one
+    transaction instead of a lookup plus a transaction."""
+
     tenant_id: UUID
     user_id: UUID
-    role: Role
 
     @asynccontextmanager
     async def tx(self, engine: AsyncEngine) -> AsyncGenerator[AsyncConnection, None]:
-        async with tenant_tx(
-            engine, self.tenant_id, DbRole.for_member(self.role), self.user_id
-        ) as c:
-            yield c
+        """A transaction as the member's role; 403 when they have no membership."""
+        try:
+            async with member_tx(engine, self.tenant_id, self.user_id) as (c, _role):
+                yield c
+        except NotAMember as exc:
+            raise HTTPException(403, NO_ACCOUNT) from exc
 
 
-async def member(request: Request, caller: Caller, tenant_id: Tenant) -> Member:
-    role = await member_role(request.app.state.engine, tenant_id, caller.user_id)
-    return Member(tenant_id=tenant_id, user_id=caller.user_id, role=role)
+async def member(caller: Caller, tenant_id: Tenant) -> Member:
+    return Member(tenant_id=tenant_id, user_id=caller.user_id)
 
 
 AsMember = Annotated[Member, Depends(member)]

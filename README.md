@@ -660,27 +660,27 @@ The snapshot race is handled in this order: subscribe first, then read the store
 
 ## 10. Set up and run
 
-You need Docker, [uv](https://docs.astral.sh/uv/), Python 3.12 (uv downloads it if it's missing) and a Supabase project. Docker runs only Redis and the throwaway test database. The application database and user accounts live in Supabase.
+You need Docker, [uv](https://docs.astral.sh/uv/), Python 3.12 (uv downloads it if it's missing) and a Supabase project. In development, Docker runs Redis, the application database (Postgres on `localhost:5434`) and the throwaway test database; Supabase provides sign-in only. Production keeps its database on Supabase.
 
 ### Run locally
 
-1. Copy `.env.example` to `.env` and replace the `<...>` placeholders with your Supabase project's session pooler URL, project URL and secret key (`sb_secret_...`). Leave `ORQEN_MIGRATION_DATABASE_URL` commented out unless your network has IPv6.
-2. Apply the schema and seed the `orqen` tenant, its owner and two contestants:
+1. Copy `.env.example` to `.env` and replace the `<...>` placeholders with your Supabase project URL and secret key (`sb_secret_...`). `ORQEN_DATABASE_URL` already points at the local Postgres; to run against Supabase's database instead, swap it for the commented session pooler line.
+2. Start the containers, apply the schema and seed the `orqen` tenant, its owner and two contestants:
 
    ```sh
    make install
-   make migrate          # alembic upgrade head on Supabase
-   make seed             # safe to rerun
+   make up               # Redis on :6380, Postgres on :5434
+   make migrate          # alembic upgrade head on ORQEN_DATABASE_URL
+   make seed             # safe to rerun; creates or finds the users in Supabase Auth
    ```
 
 3. Start the services:
 
    ```sh
-   make up           # Redis on localhost:6380
    make streams      # create the Redis streams and consumer groups
    make gateway      # http://localhost:8000/readyz checks Supabase and Redis
    make proxy        # the LLM proxy on :8080, with the fake provider
-   make workers      # orchestrator, executor and grader in one process
+   make workers      # orchestrator, executor and grader in one process; restarts on code changes
    ```
 
 4. Sign in through Supabase (GitHub, or an email and password), then call `POST /v1/me` and `POST /v1/submissions` with the access token. `GET /v1/submissions/{id}` shows the result.

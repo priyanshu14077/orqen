@@ -6,7 +6,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from orqen_core.db import DbRole, tenant_tx
+from orqen_core.db import DbRole, NotAMember, member_tx, tenant_tx
+from orqen_core.models import Role
 from scripts import seed
 from tests.conftest import RIVAL, seed_all
 
@@ -108,6 +109,34 @@ async def test_tenant_tx_runs_as_the_role_with_tenant_and_user_set(seeded: Async
         ).one()
     assert role not in set(DbRole)
     assert not tid
+
+
+async def test_member_tx_runs_as_the_membership_role(seeded: AsyncEngine) -> None:
+    tenant_id = seed.sid("tenant", seed.TENANT)
+    for email, role in ((seed.OWNER, Role.ADMIN), ("alice@orqen.test", Role.CONTESTANT)):
+        user_id = seed.sid("user", email)
+        async with member_tx(seeded, tenant_id, user_id) as (conn, found):
+            row = (
+                await conn.execute(
+                    text(
+                        "SELECT current_user, current_setting('app.tenant_id'),"
+                        " current_setting('app.user_id')"
+                    )
+                )
+            ).one()
+        assert found is role
+        assert tuple(row) == (DbRole.for_member(role).value, str(tenant_id), str(user_id))
+
+    async with seeded.connect() as conn:
+        current = (await conn.execute(text("SELECT current_user"))).scalar_one()
+    assert current not in set(DbRole)
+
+
+async def test_member_tx_refuses_a_user_of_another_tenant(seeded: AsyncEngine) -> None:
+    rival_admin = seed.sid("user", "admin@rival.test")
+    with pytest.raises(NotAMember):
+        async with member_tx(seeded, seed.sid("tenant", seed.TENANT), rival_admin):
+            pass
 
 
 async def test_a_person_role_needs_a_user(seeded: AsyncEngine) -> None:

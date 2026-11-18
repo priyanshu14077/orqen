@@ -26,7 +26,7 @@ from orqen_core import keys, streams
 from orqen_core.db import DbRole, tenant_tx
 from orqen_core.logging import get_logger
 from orqen_core.models import Mode, Role, SubmissionMsg, SubmissionStatus
-from orqen_gateway.deps import Caller, Tenant, member_role, refusal
+from orqen_gateway.deps import AsMember, Caller, Member, Tenant, refusal
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/v1")
@@ -145,18 +145,17 @@ async def create_submission(
     request: Request,
     response: Response,
     body: SubmissionIn,
-    caller: Caller,
-    tenant_id: Tenant,
+    who: AsMember,
     idempotency_key: Annotated[str | None, Header(max_length=128)] = None,
 ) -> SubmissionAccepted:
     engine: AsyncEngine = request.app.state.engine
-    role = await member_role(engine, tenant_id, caller.user_id)
+    tenant_id, user_id = who.tenant_id, who.user_id
     trace_id: str = request.state.trace_id
     payload: dict[str, Any] = {"prompt": body.prompt}
     if body.model:
         payload["model"] = body.model
     try:
-        async with tenant_tx(engine, tenant_id, DbRole.for_member(role), caller.user_id) as c:
+        async with who.tx(engine) as c:
             found = await c.execute(
                 text(
                     """
@@ -169,7 +168,7 @@ async def create_submission(
                 ),
                 {
                     "t": tenant_id,
-                    "u": caller.user_id,
+                    "u": user_id,
                     "p": body.problem_id,
                     "c": body.contest_id,
                     "kind": body.kind,
@@ -183,7 +182,7 @@ async def create_submission(
     except DBAPIError as exc:
         if getattr(exc.orig, "sqlstate", None) == "23505" and idempotency_key:
             response.status_code = 200
-            return await _replay(engine, tenant_id, role, caller.user_id, idempotency_key)
+            return await _replay(engine, who, idempotency_key)
         if mapped := refusal(exc):
             raise mapped from exc
         raise
@@ -192,7 +191,7 @@ async def create_submission(
         tenant_id=tenant_id,
         trace_id=trace_id,
         submission_id=submission_id,
-        user_id=caller.user_id,
+        user_id=user_id,
         problem_id=body.problem_id,
         mode=body.mode,
     )
@@ -209,17 +208,15 @@ async def create_submission(
     return SubmissionAccepted(submission_id=submission_id, status=SubmissionStatus.QUEUED)
 
 
-async def _replay(
-    engine: AsyncEngine, tenant_id: UUID, role: Role, user_id: UUID, key: str
-) -> SubmissionAccepted:
-    async with tenant_tx(engine, tenant_id, DbRole.for_member(role), user_id) as c:
+async def _replay(engine: AsyncEngine, who: Member, key: str) -> SubmissionAccepted:
+    async with who.tx(engine) as c:
         row = (
             await c.execute(
                 text(
                     "SELECT id, status FROM judging.submissions"
                     " WHERE tenant_id = :t AND user_id = :u AND idempotency_key = :k"
                 ),
-                {"t": tenant_id, "u": user_id, "k": key},
+                {"t": who.tenant_id, "u": who.user_id, "k": key},
             )
         ).one()
     return SubmissionAccepted(submission_id=row.id, status=SubmissionStatus(row.status))
