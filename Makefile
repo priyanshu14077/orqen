@@ -39,8 +39,8 @@ gateway: ## Run the gateway on :8000 with reload
 proxy: ## Run the LLM proxy on :8080 with reload
 	uv run uvicorn orqen_proxy.app:app --reload --port 8080
 
-workers: ## Run the orchestrator, executor and grader in one process
-	uv run orqen-workers all
+workers: ## Run the orchestrator, executor and grader in one process, restarting on code changes
+	uv run watchfiles --filter python --sigint-timeout 10 "orqen-workers all" services packages
 
 web: ## Run the Next.js frontend on :3000
 	cd web && npm run dev

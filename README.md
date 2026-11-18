@@ -680,7 +680,7 @@ You need Docker, [uv](https://docs.astral.sh/uv/), Python 3.12 (uv downloads it 
    make streams      # create the Redis streams and consumer groups
    make gateway      # http://localhost:8000/readyz checks Supabase and Redis
    make proxy        # the LLM proxy on :8080, with the fake provider
-   make workers      # orchestrator, executor and grader in one process
+   make workers      # orchestrator, executor and grader in one process; restarts on code changes
    ```
 
 4. Sign in through Supabase (GitHub, or an email and password), then call `POST /v1/me` and `POST /v1/submissions` with the access token. `GET /v1/submissions/{id}` shows the result.
