@@ -67,6 +67,7 @@ Caller = Annotated[Principal, Depends(principal)]
 Tenant = Annotated[UUID, Depends(platform_tenant)]
 
 
+# The frontend matches this detail to create the account and retry (web/src/lib/server/gateway.ts).
 NO_ACCOUNT = "no Orqen account yet: call POST /v1/me first"
 
 

@@ -26,7 +26,7 @@ from orqen_core import keys, streams
 from orqen_core.db import DbRole, tenant_tx
 from orqen_core.logging import get_logger
 from orqen_core.models import Mode, Role, SubmissionMsg, SubmissionStatus
-from orqen_gateway.deps import AsMember, Caller, Member, Tenant, refusal
+from orqen_gateway.deps import NO_ACCOUNT, AsMember, Caller, Member, Tenant, refusal
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/v1")
@@ -117,7 +117,7 @@ async def get_me(request: Request, caller: Caller, tenant_id: Tenant) -> MeOut:
     async with tenant_tx(request.app.state.engine, tenant_id, DbRole.WORKER) as c:
         found = await read_me(c, tenant_id, caller.user_id)
     if found is None:
-        raise HTTPException(403, "no Orqen account yet: call POST /v1/me first")
+        raise HTTPException(403, NO_ACCOUNT)
     return found
 
 
