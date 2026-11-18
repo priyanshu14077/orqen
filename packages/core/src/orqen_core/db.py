@@ -64,3 +64,44 @@ async def tenant_tx(
             {"role": role.value, "tid": str(tenant_id), "uid": str(user_id) if user_id else ""},
         )
         yield conn
+
+
+class NotAMember(LookupError):
+    """The user has no membership in the tenant."""
+
+
+# Runs as the login role, which owns the tables and so bypasses row-level security,
+# then switches to the member's role for the rest of the transaction. The CASE keeps
+# the role name out of the data: only the three person roles can come out of it.
+MEMBER_SCOPE_SQL = """
+    SELECT m.role,
+           set_config('role', CASE m.role
+               WHEN 'contestant' THEN 'orqen_contestant'
+               WHEN 'setter' THEN 'orqen_setter'
+               WHEN 'admin' THEN 'orqen_admin'
+           END, true),
+           set_config('app.tenant_id', :tid, true),
+           set_config('app.user_id', :uid, true)
+    FROM identity.memberships m
+    WHERE m.tenant_id = :t AND m.user_id = :u
+"""
+
+
+@asynccontextmanager
+async def member_tx(
+    engine: AsyncEngine, tenant_id: UUID, user_id: UUID
+) -> AsyncGenerator[tuple[AsyncConnection, Role], None]:
+    """`tenant_tx` as the user's membership role, looked up in the same round trip.
+
+    Raises `NotAMember` when the user has no membership in the tenant.
+    """
+    async with engine.begin() as conn:
+        row = (
+            await conn.execute(
+                text(MEMBER_SCOPE_SQL),
+                {"t": tenant_id, "u": user_id, "tid": str(tenant_id), "uid": str(user_id)},
+            )
+        ).first()
+        if row is None:
+            raise NotAMember(f"user {user_id} is not a member of tenant {tenant_id}")
+        yield conn, Role(row.role)
