@@ -34,6 +34,15 @@ def make_engine(url: str, *, pool_size: int = 5) -> AsyncEngine:
     return create_async_engine(url, pool_size=pool_size, pool_pre_ping=True)
 
 
+# `set_config('role', r, true)` is `SET LOCAL ROLE r`, but it takes a bound value and
+# shares one round trip with the tenant and user settings.
+SCOPE_SQL = """
+    SELECT set_config('role', :role, true),
+           set_config('app.tenant_id', :tid, true),
+           set_config('app.user_id', :uid, true)
+"""
+
+
 @asynccontextmanager
 async def tenant_tx(
     engine: AsyncEngine,
@@ -43,19 +52,15 @@ async def tenant_tx(
 ) -> AsyncGenerator[AsyncConnection, None]:
     """A transaction that runs as `role`, scoped to one tenant and, for people, one user.
 
-    Row-level security policies read `app.tenant_id` and `app.user_id`. `SET LOCAL`
-    ends with the transaction, so a pooled connection never carries one request's
-    scope into the next.
+    Row-level security policies read `app.tenant_id` and `app.user_id`. The settings
+    are transaction-local, so a pooled connection never carries one request's scope
+    into the next.
     """
     if role is not DbRole.WORKER and user_id is None:
         raise ValueError(f"{role} acts for a person and needs a user_id")
     async with engine.begin() as conn:
-        await conn.execute(text(f"SET LOCAL ROLE {role.value}"))
         await conn.execute(
-            text(
-                "SELECT set_config('app.tenant_id', :tid, true),"
-                " set_config('app.user_id', :uid, true)"
-            ),
-            {"tid": str(tenant_id), "uid": str(user_id) if user_id else ""},
+            text(SCOPE_SQL),
+            {"role": role.value, "tid": str(tenant_id), "uid": str(user_id) if user_id else ""},
         )
         yield conn
